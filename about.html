@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Fast Robots | About</title>
+  <meta name="description" content="ECE 5160 Spring 2026" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="header">
+    <div class="wrap header__inner">
+      <div class="brand">
+        <div class="brand__logo" aria-hidden="true">🚗</div>
+        <div class="brand__text">
+          <h1>Fast Robots</h1>
+          <p>ECE 5160 Spring 2026</p>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a href="labs.html">Labs</a>
+        <a href="about.html">About</a>
+        <a href="collaboration.html">Collaboration Statement</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="section">
+      <div class="profile">
+        <img class="profile__img" src="assets/profile_picture.jpg" alt="Profile picture" />
+        <div class="profile__text">
+          <h2>About</h2>
+          <p>
+            Hey, I’m Coby Lai. I’m from just outside Boston, MA, and I’m an early M.Eng student in ECE.
+            This website showcases my work for Fast Robots (ECE 5160) in Spring 2026.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p class="muted">© <span id="year"></span> Coby</p>
+    </footer>
+  </main>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+  <script src="site.js"></script>
+</body>
+</html>
