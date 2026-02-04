@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Coby’s Lab Portfolio</title>
+  <meta name="description" content="Class labs, writeups, and code links." />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="header">
+    <div class="wrap header__inner">
+      <div class="brand">
+        <div class="brand__logo" aria-hidden="true">📓</div>
+        <div class="brand__text">
+          <h1>Coby’s Lab Portfolio</h1>
+          <p>Labs, writeups, and code, organized by class.</p>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a href="#labs">Labs</a>
+        <a href="#about">About</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="controls" aria-label="Filters and search">
+      <div class="controls__left">
+        <label class="control">
+          <span class="control__label">Search</span>
+          <input id="search" class="input" type="search" placeholder="Try: slam, lidar, kalman, PID, CAD..." />
+        </label>
+
+        <label class="control">
+          <span class="control__label">Class</span>
+          <select id="classFilter" class="input">
+            <option value="all">All</option>
+          </select>
+        </label>
+
+        <label class="control">
+          <span class="control__label">Tag</span>
+          <select id="tagFilter" class="input">
+            <option value="all">All</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="controls__right">
+        <button id="reset" class="btn btn--ghost" type="button">Reset</button>
+        <button id="addHint" class="btn" type="button" title="Shows where to edit labs in the code">Where do I edit?</button>
+      </div>
+    </section>
+
+    <section id="labs" class="section">
+      <div class="section__head">
+        <h2>Labs</h2>
+        <p id="resultsCount" class="muted">Loading…</p>
+      </div>
+
+      <div id="grid" class="grid" aria-live="polite"></div>
+    </section>
+
+    <section id="about" class="section">
+      <div class="card card--wide">
+        <h2>About this site</h2>
+        <p>
+          This is a static GitHub Pages site. Update your labs by editing <code>app.js</code>
+          in the <code>LABS</code> array.
+        </p>
+        <ul class="list">
+          <li>Each lab card can link to a PDF writeup, GitHub repo, demo video, or code folder.</li>
+          <li>Use tags like <span class="tag">controls</span>, <span class="tag">perception</span>, <span class="tag">CAD</span>, <span class="tag">embedded</span>.</li>
+          <li>If you want, add a <code>docs/</code> folder and set Pages to deploy from <code>/docs</code>.</li>
+        </ul>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p class="muted">© <span id="year"></span> Coby • Built for GitHub Pages</p>
+    </footer>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
