@@ -30,73 +30,506 @@
     <a class="backlink" href="../labs.html">← Back to Labs</a>
 
     <h1>Lab 1: Artemis and Bluetooth</h1>
-    <div class="date">Date: <span class="muted">TBD</span></div>
+    <div class="date">Due: <span class="muted">01/03/2026</span></div>
 
-    <div class="kv">
-      <span>Hardware: TBD</span>
-      <span>Tools: Arduino IDE, BLE</span>
-      <span>Repo: TBD</span>
-    </div>
+    <h2>1A</h2>
 
+    <h2>1A.1</h2>
+    <p>Established a successful connection with the Artemis board.</p>
+
+    <h2>1A.2</h2>
     <p>
-      Write a short 1–2 sentence overview here describing what you built and what worked.
+      Executed the Blink example from File → Examples → 01.Basics. The program uploaded correctly,
+      and the Artemis LED blinked as expected.
     </p>
-
-    <h2>Task 1: ECHO</h2>
-    <p>
-      Explain what you implemented in a couple sentences, like your screenshot format.
-    </p>
-
-    <h3 class="muted">Embedded GitHub Gist</h3>
-    <p class="muted">
-      Create a Gist on GitHub, then paste its embed script below.
-    </p>
-
-    <!-- Replace the src with your real gist embed URL -->
-    <!-- Example: https://gist.github.com/USERNAME/GIST_ID.js -->
-    <script src="https://gist.github.com/USERNAME/GIST_ID.js"></script>
-
-    <h3 class="muted">Copy-friendly code block</h3>
-    <div class="codeblock">
-      <button class="copybtn" data-copy-target="code-echo-1">Copy</button>
-      <pre id="code-echo-1"><code>// Paste code here if you want it directly on the page
-// This block supports a Copy button</code></pre>
-    </div>
-
-    <h3 class="muted">Numbered steps</h3>
-    <ol class="muted">
-      <li>Step 1 placeholder</li>
-      <li>Step 2 placeholder</li>
-      <li>Step 3 placeholder</li>
-    </ol>
-
-    <h3 class="muted">Screenshot</h3>
-    <figure class="figure">
-      <!-- Put your image in: assets/lab1/img/... then update the src -->
-      <img src="../assets/lab1/img/screenshot1.png" alt="Lab 1 screenshot placeholder" />
-      <figcaption>
-        Caption describing what this screenshot shows.
-      </figcaption>
-    </figure>
-
-    <h3 class="muted">Video</h3>
-    <p class="muted">Option A: upload a local MP4 and use the video tag.</p>
     <video class="video" controls>
-      <source src="../assets/lab1/video/demo.mp4" type="video/mp4" />
+      <source src="../assets/lab1/1a%202.mp4" type="video/mp4" />
       Your browser does not support the video tag.
     </video>
 
-    <p class="muted">Option B: embed YouTube using an iframe.</p>
-    <!--
-    <div class="figure">
-      <iframe width="100%" height="420"
-        src="https://www.youtube.com/embed/VIDEO_ID"
-        title="YouTube video player"
-        frameborder="0"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-        allowfullscreen></iframe>
+    <h2>1A.3</h2>
+    <p>
+      Ran Example4_Serial from File → Examples → Apollo3. The Artemis correctly received and echoed
+      serial input data.
+    </p>
+    <video class="video" controls>
+      <source src="../assets/lab1/1a%203.mp4" type="video/mp4" />
+      Your browser does not support the video tag.
+    </video>
+
+    <h2>1A.4</h2>
+    <p>
+      Used Example2_analogRead from File → Examples → Apollo3 to evaluate the onboard temperature sensor.
+      Applying a finger to the board resulted in a noticeable increase in the reported temperature.
+    </p>
+    <video class="video" controls>
+      <source src="../assets/lab1/1a%204.mp4" type="video/mp4" />
+      Your browser does not support the video tag.
+    </video>
+
+    <h2>1A.5</h2>
+    <p>
+      Executed Example1_MicrophoneOutput from File → Examples → PDM to test microphone functionality.
+      Using a frequency generator, the Artemis accurately recorded the tone.
+    </p>
+    <video class="video" controls>
+      <source src="../assets/lab1/1a%205a.mp4" type="video/mp4" />
+      Your browser does not support the video tag.
+    </video>
+    <video class="video" controls style="margin-top:12px;">
+      <source src="../assets/lab1/1a%205b.MP4" type="video/mp4" />
+      Your browser does not support the video tag.
+    </video>
+
+    <h2>1A.6</h2>
+    <video class="video" controls>
+      <source src="../assets/lab1/1a%206a.mp4" type="video/mp4" />
+      Your browser does not support the video tag.
+    </video>
+    <video class="video" controls style="margin-top:12px;">
+      <source src="../assets/lab1/1a%206b.MP4" type="video/mp4" />
+      Your browser does not support the video tag.
+    </video>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-1a6">Copy</button>
+      <pre id="cpp-1a6"><code>// After ui32LoudestFrequency is computed...
+if (ui32LoudestFrequency &lt; 380) {
+  Serial.printf("out of range\n");
+}
+else if (ui32LoudestFrequency &lt; 479) {
+  Serial.printf("G4\n");
+}
+else if (ui32LoudestFrequency &lt; 640) {
+  Serial.printf("B4\n");
+}
+else if (ui32LoudestFrequency &lt; 678) {
+  Serial.printf("E5\n");
+}
+else {
+  Serial.printf("out of range\n");
+}</code></pre>
     </div>
-    -->
+
+    <p>
+      This program reads audio from a PDM microphone, runs an FFT to find the dominant frequency, and prints
+      G4, B4, or E5 to the Serial monitor when the peak falls in those ranges. Otherwise it prints “out of range”.
+      This acts as a simple tuner.
+    </p>
+
+    <h2>1B</h2>
+
+    <h2>1B.0</h2>
+    <figure class="figure">
+      <img src="../assets/lab1/1b0a.png" alt="1B.0 setup screenshot" />
+      <figcaption>Environment setup, flashing ble_arduino.ino, and configuring connection.yaml.</figcaption>
+    </figure>
+    <p>
+      I set up a Python environment, installed Jupyter Lab, and added all necessary dependencies and course files.
+      The Jupyter server launched without issues. I flashed ble_arduino.ino onto the Artemis, successfully retrieved
+      its MAC address, and generated a UUID to update the connection.yaml configuration.
+    </p>
+
+    <h2>1B.1</h2>
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="py-1b1">Copy</button>
+      <pre id="py-1b1"><code>ble.send_command(CMD.ECHO, "test")
+ble.receive_string(ble.uuid['RX_STRING'])</code></pre>
+    </div>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="pyresp-1b1">Copy</button>
+      <pre id="pyresp-1b1"><code>['Robot says -&gt; test :)']</code></pre>
+    </div>
+
+    <p>
+      String data were transmitted from the computer to the Artemis board using the ECHO command. The Artemis board
+      returned an augmented version of the transmitted string, which was received and displayed on the computer.
+    </p>
+
+    <h2>1B.2</h2>
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-1b2">Copy</button>
+      <pre id="cpp-1b2"><code>case SEND_THREE_FLOATS:
+    /*
+     * Your code goes here.
+     */
+    float float_a, float_b, float_c;
+
+    // Extract the next value from the command string as a float
+    success = robot_cmd.get_next_value(float_a);
+    if (!success)
+        return;
+
+    // Extract the next value from the command string as a float
+    success = robot_cmd.get_next_value(float_b);
+    if (!success)
+        return;
+
+    // Extract the next value from the command string as a float
+    success = robot_cmd.get_next_value(float_c);
+    if (!success)
+        return;
+
+    Serial.print("Three Floats: ");
+    Serial.print(float_a);
+    Serial.print(", ");
+    Serial.print(float_b);
+    Serial.print(", ");
+    Serial.println(float_c);
+
+    break;</code></pre>
+    </div>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="py-1b2">Copy</button>
+      <pre id="py-1b2"><code>ble.send_command(CMD.SEND_THREE_FLOATS, "2.1|6.5|0.7")</code></pre>
+    </div>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="ser-1b2">Copy</button>
+      <pre id="ser-1b2"><code>Three Floats: 2.10, 6.50, 0.70</code></pre>
+    </div>
+
+    <p>
+      Three floating point values were transmitted to the Artemis board using the SEND_THREE_FLOATS command.
+      The Arduino sketch successfully parsed and stored the three float values from the received message.
+    </p>
+
+    <h2>1B.3</h2>
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="py-1b3">Copy</button>
+      <pre id="py-1b3"><code>ble.send_command(CMD.GET_TIME_MILLIS, "")
+ble.receive_string(ble.uuid['RX_STRING'])</code></pre>
+    </div>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="pyresp-1b3">Copy</button>
+      <pre id="pyresp-1b3"><code>['T:6233508'
+T:6233508
+]</code></pre>
+    </div>
+
+    <p>
+      A GET_TIME_MILLIS command was implemented to allow the robot to transmit a timestamp string in the format
+      T:&lt;time_in_milliseconds&gt; through the string characteristic.
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="ser-1b3">Copy</button>
+      <pre id="ser-1b3"><code>case GET_TIME_MILLIS:
+    tx_estring_value.clear();
+    tx_estring_value.append("T:");
+    tx_estring_value.append((int)millis());
+    tx_characteristic_string.writeValue(tx_estring_value.c_str());
+    break;</code></pre>
+    </div>
+
+    <h2>1B.4</h2>
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="py-1b4a">Copy</button>
+      <pre id="py-1b4a"><code>def notification_handler(uuid, byteArray): 
+    string = ble.bytearray_to_string(byteArray)
+    print(string)</code></pre>
+    </div>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="py-1b4b">Copy</button>
+      <pre id="py-1b4b"><code>ble.start_notify(ble.uuid['RX_STRING'], notification_handler)</code></pre>
+    </div>
+
+    <p>
+      A notification handler was implemented in Python to receive string data from the BLE string characteristic on
+      the Artemis board. The callback function extracted and stored the timestamp value from the received string.
+    </p>
+
+    <h2>1B.5</h2>
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="ser-1b5">Copy</button>
+      <pre id="ser-1b5"><code>case GET_TIME_MILLIS_LOOP: {
+    unsigned long start = millis();
+    int num_readings = 0;
+    while ((millis() - start) &lt; 5000) {
+        tx_estring_value.clear();
+        tx_estring_value.append("T:");
+        tx_estring_value.append((int)millis());
+        tx_characteristic_string.writeValue(tx_estring_value.c_str());
+        num_readings ++;
+    }
+
+    delay(1000);
+    Serial.println(num_readings);
+    tx_estring_value.clear();
+    tx_estring_value.append("num readings");
+    tx_estring_value.append(num_readings);
+    tx_characteristic_string.writeValue(tx_estring_value.c_str());
+}
+    break;</code></pre>
+    </div>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="py-1b5">Copy</button>
+      <pre id="py-1b5"><code>ble.send_command(CMD.GET_TIME_MILLIS_LOOP, "")</code></pre>
+    </div>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="pyresp-1b5">Copy</button>
+      <pre id="pyresp-1b5"><code>T:4330546
+T:4330546
+T:4330546
+T:4330546
+…
+T:4335499
+T:4335499
+T:4335529
+T:4335529
+num readings268</code></pre>
+    </div>
+
+    <p>
+      A loop was developed to continuously retrieve the current time in milliseconds on the Artemis board and transmit
+      it to the computer. The received timestamps were recorded over several seconds and used to calculate the effective
+      data transfer rate of the communication method. The transmission rate varied between 203 and 268 messages over a
+      5-second interval. Since each message contained 8 bytes of data, this corresponds to an average transfer rate of
+      approximately 324 to 428 bytes per second.
+    </p>
+
+    <h2>1B.6</h2>
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="ser-1b6">Copy</button>
+      <pre id="ser-1b6"><code>case SEND_TIME_DATA:
+    for(int i = 0; i &lt; array_length; i++){
+        time_array[i] = (int) millis();
+    }
+   
+    for(int i = 0; i &lt; array_length; i++){
+        tx_estring_value.clear();
+        tx_estring_value.append("T:");
+        tx_estring_value.append(time_array[i]);
+        tx_characteristic_string.writeValue(tx_estring_value.c_str());
+    }
+
+    memset(time_array, 0, sizeof(time_array));
+    break;</code></pre>
+    </div>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="py-1b6">Copy</button>
+      <pre id="py-1b6"><code>ble.send_command(CMD.SEND_TIME_DATA, "")</code></pre>
+    </div>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="pyresp-1b6">Copy</button>
+      <pre id="pyresp-1b6"><code>T:4371767
+T:4371767
+T:4371767
+…
+T:4371768
+T:4371768
+T:4371768
+T:4371768</code></pre>
+    </div>
+
+    <p>
+      A global array was created to store timestamp values so that the data could be accessed by multiple functions.
+      Instead of transmitting each timestamp immediately, the loop stored each timestamp in the array. A SEND_TIME_DATA
+      command was implemented to iterate through the array and transmit each stored timestamp as a string to the computer
+      for processing.
+    </p>
+
+    <h2>1B.7</h2>
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="ser-1b7">Copy</button>
+      <pre id="ser-1b7"><code>case GET_TEMP_READINGS:
+    for(int i = 0; i &lt; array_length; i++){
+        time_array[i] = (int) millis();
+        temp_array[i] = (float)getTempDegF();
+    }
+    for(int i = 0; i &lt; array_length; i++){
+        tx_estring_value.clear();
+        tx_estring_value.append("Temp:");
+        tx_estring_value.append(temp_array[i]);
+        tx_estring_value.append(" at time: ");
+        tx_estring_value.append(time_array[i]);
+        tx_characteristic_string.writeValue(tx_estring_value.c_str());
+    }
+    memset(time_array, 0, sizeof(time_array));
+    memset(temp_array, 0, sizeof(temp_array));
+    break;</code></pre>
+    </div>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="py-1b7">Copy</button>
+      <pre id="py-1b7"><code>ble.send_command(CMD.GET_TEMP_READINGS, "")</code></pre>
+    </div>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="pyresp-1b7">Copy</button>
+      <pre id="pyresp-1b7"><code>Temp:69 at time: 4403474
+Temp:68 at time: 4403475
+Temp:68 at time: 4403475
+…
+Temp:68 at time: 4403490
+Temp:66 at time: 4403491
+Temp:68 at time: 4403491</code></pre>
+    </div>
+
+    <p>
+      A second global array of equal length was created to store temperature measurements. Each temperature value was
+      recorded at the same index as its corresponding timestamp to maintain synchronization between the datasets.
+      A GET_TEMP_READINGS command was implemented to iterate through both arrays simultaneously and transmit paired
+      timestamp and temperature values. The Python notification handler was configured to parse the received strings
+      and store the timestamps and temperature data into separate lists.
+    </p>
+
+    <h2>1B.8</h2>
+    <p class="muted">Discuss</p>
+    <p class="muted">5000-level assignments</p>
+
+    <h2>1B.9</h2>
+    <figure class="figure">
+      <img src="../assets/lab1/1b9a.png" alt="1B.9 plot or screenshot A" />
+      <figcaption>1B.9a</figcaption>
+    </figure>
+    <figure class="figure">
+      <img src="../assets/lab1/1b9b.png" alt="1B.9 plot or screenshot B" />
+      <figcaption>1B.9b</figcaption>
+    </figure>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="py-1b9">Copy</button>
+      <pre id="py-1b9"><code>times_list = []
+rates_list = []
+sizes_list = []
+reply_store = []
+
+for step in range(5, 125, 5):
+
+    payload = "." * step
+    data_size = len(payload)
+    sizes_list.append(data_size)
+
+    t_start = time.time()
+
+    ble.send_command(CMD.ECHO, payload)
+    reply = ble.receive_string(ble.uuid['RX_STRING'])
+
+    t_end = time.time()
+
+    elapsed = t_end - t_start
+    times_list.append(elapsed)
+
+    effective_rate = data_size / elapsed
+    rates_list.append(effective_rate)
+
+    reply_store.append(reply)
+
+    print("message:", payload)
+    print("size:", data_size, "bytes")
+    print("time:", elapsed)
+    print("effective data rate:", effective_rate)
+    print()</code></pre>
+    </div>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="pyresp-1b9">Copy</button>
+      <pre id="pyresp-1b9"><code>message: .....
+size: 5 bytes
+time: 0.10319685935974121
+effective data rate: 48.45108689374109
+
+message: ..........
+size: 10 bytes
+time: 0.12408995628356934
+effective data rate: 80.5866993550073
+
+…
+
+message: ........................................................................................................................
+size: 120 bytes
+time: 0.11944985389709473
+effective data rate: 1004.6056657664832</code></pre>
+    </div>
+
+    <p>
+      The 5-byte reply took 0.103 s, giving a data rate of 48.45 bytes/s. The 120-byte reply took 0.119 s, giving
+      1004.61 bytes/s. Since response time stays nearly constant, small packets suffer high overhead and low efficiency.
+      Larger replies reduce overhead and significantly improve data rate, as shown by the increasing trend in the plot.
+    </p>
+
+    <h2>1B.10</h2>
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="ser-1b10">Copy</button>
+      <pre id="ser-1b10"><code>case RELIABILITY: {
+    int count;
+    success = robot_cmd.get_next_value(count);
+    if (!success) return;
+
+    if (count &lt; 0) count = 0;
+    Serial.println("Sending packets...");
+
+    for (int i = 0; i &lt; count; i++) {
+        tx_estring_value.clear();
+        tx_estring_value.append("ID:");
+        tx_estring_value.append(i);
+        tx_characteristic_string.writeValue(tx_estring_value.c_str());
+    }
+
+    break;
+}</code></pre>
+    </div>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="py-1b10">Copy</button>
+      <pre id="py-1b10"><code>packets_received = set()
+
+def notification_handler(uuid, byte_array):
+    msg = ble.bytearray_to_string(byte_array).strip()
+
+    if msg.startswith("ID:"):
+        try:
+            packets_received.add(int(msg[3:]))
+        except ValueError:
+            pass
+
+ble.start_notify(ble.uuid['RX_STRING'], notification_handler)
+
+total_packets = 1000
+packets_received.clear()
+
+ble.send_command(CMD.RELIABILITY, total_packets)
+
+time.sleep(30)
+
+try:
+    msg = ble.receive_string(ble.uuid['RX_STRING']).strip()
+    print("final read:", msg)
+except Exception as e:
+    print("final read failed:", e)
+
+missing_packets = [i for i in range(total_packets) if i not in packets_received]
+packet_loss_percent = 100.0 * len(missing_packets) / total_packets
+
+print("Total Packets Sent:", total_packets)
+print("Packets Received:", len(packets_received))
+print("Packets Missing:", len(missing_packets))
+print("Packet Loss (%):", packet_loss_percent)
+
+ble.stop_notify(ble.uuid['RX_STRING'])</code></pre>
+    </div>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="pyresp-1b10">Copy</button>
+      <pre id="pyresp-1b10"><code>final read: ID:999
+Total Packets Sent: 1000
+Packets Received: 1000
+Packets Missing: 0
+Packet Loss (%): 0.0</code></pre>
+    </div>
+
+    <p>
+      As seen by the 100% data capture, the Artemis did not have an issue with data capture at higher speeds.
+    </p>
 
     <footer class="footer">
       <p class="muted">© <span id="year"></span> Coby</p>
