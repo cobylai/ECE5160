@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Fast Robots | Labs</title>
+  <meta name="description" content="ECE 5160 Spring 2026" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="header">
+    <div class="wrap header__inner">
+      <div class="brand">
+        <div class="brand__logo" aria-hidden="true">🚗</div>
+        <div class="brand__text">
+          <h1>Fast Robots</h1>
+          <p>ECE 5160 Spring 2026</p>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a href="labs.html">Labs</a>
+        <a href="about.html">About</a>
+        <a href="collaboration.html">Collaboration Statement</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="section">
+      <div class="section__head">
+        <h2>Labs</h2>
+        <p class="muted">Click a lab to open its page.</p>
+      </div>
+
+      <div class="grid">
+        <article class="card">
+          <h3>Lab 1: Artemis and Bluetooth</h3>
+          <p>BLE setup, command handling, and initial communication tests.</p>
+          <div class="links">
+            <a href="labs/lab1.html">Open Lab 1</a>
+          </div>
+        </article>
+
+        <article class="card">
+          <h3>Lab 2: IMU</h3>
+          <p>IMU reading, calibration, and basic orientation outputs.</p>
+          <div class="links"><a href="labs/lab2.html">Open Lab 2</a></div>
+        </article>
+
+        <article class="card">
+          <h3>Lab 3: ToF</h3>
+          <p>Time-of-flight sensing, filtering, and ranging characterization.</p>
+          <div class="links"><a href="labs/lab3.html">Open Lab 3</a></div>
+        </article>
+
+        <article class="card">
+          <h3>Lab 4: Motor Drivers and Open Loop Control</h3>
+          <p>Driver bring-up, PWM, and open-loop motion tests.</p>
+          <div class="links"><a href="labs/lab4.html">Open Lab 4</a></div>
+        </article>
+
+        <article class="card">
+          <h3>Lab 5: Linear PID and Linear Interpolation</h3>
+          <p>Line tracking or distance control with PID and interpolation tools.</p>
+          <div class="links"><a href="labs/lab5.html">Open Lab 5</a></div>
+        </article>
+
+        <article class="card">
+          <h3>Lab 6: Orientation PID</h3>
+          <p>Angle control, tuning, and response evaluation.</p>
+          <div class="links"><a href="labs/lab6.html">Open Lab 6</a></div>
+        </article>
+
+        <article class="card">
+          <h3>Lab 7: Kalman Filtering</h3>
+          <p>State estimation with noisy sensors and model updates.</p>
+          <div class="links"><a href="labs/lab7.html">Open Lab 7</a></div>
+        </article>
+
+        <article class="card">
+          <h3>Lab 8: Stunts!</h3>
+          <p>Performance maneuvers and demonstration behaviors.</p>
+          <div class="links"><a href="labs/lab8.html">Open Lab 8</a></div>
+        </article>
+
+        <article class="card">
+          <h3>Lab 9: Mapping</h3>
+          <p>Build a map from sensor readings and motion estimates.</p>
+          <div class="links"><a href="labs/lab9.html">Open Lab 9</a></div>
+        </article>
+
+        <article class="card">
+          <h3>Lab 10: Localization (sim)</h3>
+          <p>Localization pipeline in simulation.</p>
+          <div class="links"><a href="labs/lab10.html">Open Lab 10</a></div>
+        </article>
+
+        <article class="card">
+          <h3>Lab 11: Localization (real)</h3>
+          <p>Localization pipeline on the real robot.</p>
+          <div class="links"><a href="labs/lab11.html">Open Lab 11</a></div>
+        </article>
+
+        <article class="card">
+          <h3>Lab 12: Planning and Execution</h3>
+          <p>Plan generation and executing trajectories reliably.</p>
+          <div class="links"><a href="labs/lab12.html">Open Lab 12</a></div>
+        </article>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p class="muted">© <span id="year"></span> Coby</p>
+    </footer>
+  </main>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+  <script src="site.js"></script>
+</body>
+</html>
