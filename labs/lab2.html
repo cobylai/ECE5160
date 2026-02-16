@@ -485,37 +485,13 @@ tx_estring_value.append(pitch_gyro_filt_deg_array[i]);
 tx_characteristic_string.writeValue(tx_estring_value.c_str());</code></pre>
     </div>
 
-    <figure class="media-wrap">
-      <img class="media portrait" src="../assets/lab2/4.3.1.png" alt="GET_IMU_DATA_LOOP 10000 issued" />
-      <figcaption>Figure 4.3.1: GET_IMU_DATA_LOOP 10000 issued.</figcaption>
-    </figure>
-
-    <figure class="media-wrap">
-      <img class="media portrait" src="../assets/lab2/4.3.2.png" alt="SEND_IMU_DATA issued and RP packets streaming" />
-      <figcaption>Figure 4.3.2: SEND_IMU_DATA issued and RP packets streaming.</figcaption>
-    </figure>
-
     <h2>5. Record a Stunt</h2>
-    <p>
-      Five minutes of driving was recorded to establish a baseline. Forward acceleration produced pitch transients.
-      Turning produced roll transients. Vibration increased high-frequency noise in the accelerometer-derived estimate.
-      The complementary filtered estimate remained stable compared to the raw accelerometer estimate.
-    </p>
 
     <figure class="media-wrap">
       <video class="media" controls>
-        <source src="../assets/lab2/5.1.1.mp4" type="video/mp4" />
+        <source src="../assets/lab2/5.mp4" type="video/mp4" />
         Your browser does not support the video tag.
       </video>
-      <figcaption>Video 5.1.1: Driving clip (forward, reverse, turns).</figcaption>
-    </figure>
-
-    <figure class="media-wrap">
-      <video class="media" controls>
-        <source src="../assets/lab2/5.1.2.mp4" type="video/mp4" />
-        Your browser does not support the video tag.
-      </video>
-      <figcaption>Video 5.1.2: Stunt clip (fast turn or quick accel and brake).</figcaption>
     </figure>
 
     <h2>Discussion</h2>
