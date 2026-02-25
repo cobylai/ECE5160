@@ -8,7 +8,6 @@
   <link rel="stylesheet" href="../style.css" />
 
   <style>
-    /* Media must be max 1/4 window width */
     .media-wrap { margin: 12px 0; }
     figure.media-wrap { margin: 12px 0; }
     .media {
@@ -29,7 +28,6 @@
       color: rgba(232,237,247,.78);
     }
 
-    /* Side-by-side media rows */
     .media-row {
       display: flex;
       gap: 14px;
@@ -37,11 +35,8 @@
       flex-wrap: wrap;
       margin: 12px 0;
     }
-    .media-row figure {
-      margin: 0;
-    }
+    .media-row figure { margin: 0; }
 
-    /* Code block language label in top-right corner */
     .codeblock {
       position: relative;
       margin: 12px 0;
@@ -67,7 +62,7 @@
       padding: 14px;
       padding-top: 44px;
       overflow: auto;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
       font-size: 13px;
       line-height: 1.6;
       color: rgba(232,237,247,.95);
@@ -90,7 +85,6 @@
       background: rgba(122,167,255,.14);
     }
 
-    /* Make sure the page still works on small screens */
     @media (max-width: 700px) {
       .media { max-width: 100%; }
       .media.portrait { max-height: none; }
@@ -103,7 +97,7 @@
   <header class="header">
     <div class="wrap header__inner">
       <div class="brand">
-        <div class="brand__logo" aria-hidden="true">🚗</div>
+        <div class="brand__logo">🚗</div>
         <div class="brand__text">
           <h1>Fast Robots</h1>
           <p>ECE 5160 Spring 2026</p>
@@ -122,11 +116,10 @@
     <a class="backlink" href="../labs.html">← Back to Labs</a>
 
     <h1>Lab 3: Time-of-Flight Distance Sensing</h1>
-    <div class="date">Due: <span class="muted">TBD</span></div>
 
     <h2>Overview</h2>
     <p>
-      This lab integrates two VL53L1X time-of-flight (ToF) distance sensors with the Artemis over I²C using QWIIC.
+      This lab integrates two VL53L1X time-of-flight distance sensors with the Artemis over I²C using QWIIC.
       The work focuses on reliable wiring, confirming I²C communication, resolving address conflicts for dual-sensor use,
       and evaluating measurement stability across static and dynamic tests.
     </p>
@@ -138,12 +131,11 @@
       After confirming the wiring color scheme, the battery leads were soldered to a connector compatible with the Artemis board
       to provide a secure and reliable power interface. Care was taken to ensure proper polarity and mechanical strain relief
       to prevent accidental disconnection during operation.
-      <span class="muted">(insert 1.png)</span>
     </p>
 
     <figure class="media-wrap">
       <img class="media portrait" src="../assets/lab3/1.png" alt="Battery leads soldered to Artemis-compatible connector" />
-      <figcaption>Figure 1: Battery leads soldered to an Artemis-compatible connector. <span class="muted">(insert 1.png)</span></figcaption>
+      <figcaption>Figure 1: Battery leads soldered to an Artemis-compatible connector.</figcaption>
     </figure>
 
     <h3>1.2 QWIIC leads on the ToF boards</h3>
@@ -151,12 +143,11 @@
       The supplied QWIIC cables were cut and soldered directly to the ToF sensor boards. These connections allow the sensors to plug
       into a QWIIC splitter, enabling multiple devices to share a single I²C port on the Artemis while maintaining a compact and organized
       wiring layout.
-      <span class="muted">(insert 2.png)</span>
     </p>
 
     <figure class="media-wrap">
       <img class="media portrait" src="../assets/lab3/2.png" alt="QWIIC cable soldered to ToF sensor board" />
-      <figcaption>Figure 2: QWIIC cables soldered directly to the ToF boards. <span class="muted">(insert 2.png)</span></figcaption>
+      <figcaption>Figure 2: QWIIC cables soldered directly to the ToF boards.</figcaption>
     </figure>
 
     <h3>1.3 Confirm I²C communication</h3>
@@ -166,10 +157,10 @@
     </p>
 
     <div class="codeblock">
-      <button class="copybtn" data-copy-target="ser-1-3-scan">Copy</button>
+      <button class="copybtn" data-copy-target="scan">Copy</button>
       <span class="codebadge">Serial Monitor</span>
-      <pre id="ser-1-3-scan"><code>Scanning… (port: 0x10000E9C), time (ms): 1855650
-  0x29 detected</code></pre>
+      <pre id="scan"><code>Scanning… (port: 0x10000E9C), time (ms): 1855650
+0x29 detected</code></pre>
     </div>
 
     <h3>1.4 Dual-sensor addressing with XSHUT</h3>
@@ -178,106 +169,25 @@
       To resolve this, a wire was soldered from Artemis pin 8 to the XSHUT pin of one sensor. This hardware shutdown line allows that sensor
       to be temporarily disabled during initialization, enabling the active sensor’s address to be reassigned before bringing the second device online.
       Once configured, both sensors can operate concurrently and be addressed independently.
-      <span class="muted">(insert 3.png and 4.png side by side)</span>
     </p>
 
     <div class="media-row">
       <figure class="media-wrap">
-        <img class="media portrait" src="../assets/lab3/3.png" alt="XSHUT wiring from Artemis pin 8 to ToF sensor" />
-        <figcaption>Figure 3: XSHUT wire from Artemis pin 8 to one ToF sensor. <span class="muted">(insert 3.png)</span></figcaption>
+        <img class="media portrait" src="../assets/lab3/3.png" alt="XSHUT wiring" />
+        <figcaption>Figure 3: XSHUT wire from Artemis pin 8.</figcaption>
       </figure>
 
       <figure class="media-wrap">
-        <img class="media portrait" src="../assets/lab3/4.png" alt="Two ToF sensors connected via QWIIC splitter" />
-        <figcaption>Figure 4: Dual ToF setup on a QWIIC splitter. <span class="muted">(insert 4.png)</span></figcaption>
+        <img class="media portrait" src="../assets/lab3/4.png" alt="Dual ToF setup" />
+        <figcaption>Figure 4: Dual ToF setup on QWIIC splitter.</figcaption>
       </figure>
-    </div>
-
-    <div class="codeblock">
-      <button class="copybtn" data-copy-target="cpp-1-4-get-tof">Copy</button>
-      <span class="codebadge">C++</span>
-      <pre id="cpp-1-4-get-tof"><code>case GET_TOF_DATA: {
-  int n = 100;
-  robot_cmd.get_next_value(n);
-  if (n &lt;= 0) n = 100;
-  if (n &gt; array_length) n = array_length;
-
-  pinMode(SHUTDOWN_PIN, OUTPUT);
-
-  // Keep sensor 2 off while configuring sensor 1
-  digitalWrite(SHUTDOWN_PIN, LOW);
-  delay(10);
-
-  if (distanceSensor1.init() != 0) {
-    tx_estring_value.clear();
-    tx_estring_value.append("TOF sensor 1 init failed");
-    tx_characteristic_string.writeValue(tx_estring_value.c_str());
-    break;
-  }
-
-  // Assign a new I2C address to sensor 1 (so both can coexist)
-  distanceSensor1.setI2CAddress(0x54);
-  delay(100);
-
-  // Bring sensor 2 back online
-  digitalWrite(SHUTDOWN_PIN, HIGH);
-  delay(100);
-
-  if (distanceSensor2.init() != 0) {
-    tx_estring_value.clear();
-    tx_estring_value.append("TOF sensor 2 init failed");
-    tx_characteristic_string.writeValue(tx_estring_value.c_str());
-    break;
-  }
-
-  distanceSensor1.setDistanceModeShort();
-  distanceSensor2.setDistanceModeShort();
-
-  for (int i = 0; i &lt; n; i++) {
-    distanceSensor1.startRanging();
-    distanceSensor2.startRanging();
-
-    while (!distanceSensor1.checkForDataReady()) { delay(1); }
-    while (!distanceSensor2.checkForDataReady()) { delay(1); }
-
-    tof_d1_array[i] = distanceSensor1.getDistance();
-    distanceSensor1.clearInterrupt();
-    distanceSensor1.stopRanging();
-
-    tof_d2_array[i] = distanceSensor2.getDistance() + 30;
-    distanceSensor2.clearInterrupt();
-    distanceSensor2.stopRanging();
-
-    tof_time_array[i] = (int)millis();
-  }
-
-  for (int j = 0; j &lt; n; j++) {
-    tx_estring_value.clear();
-    tx_estring_value.append(tof_time_array[j]);
-    tx_estring_value.append(",");
-    tx_estring_value.append(tof_d1_array[j]);
-    tx_estring_value.append(",");
-    tx_estring_value.append(tof_d2_array[j]);
-    tx_characteristic_string.writeValue(tx_estring_value.c_str());
-    delay(10);
-  }
-
-  memset(tof_time_array, 0, sizeof(tof_time_array));
-  memset(tof_d1_array, 0, sizeof(tof_d1_array));
-  memset(tof_d2_array, 0, sizeof(tof_d2_array));
-
-  break;
-}</code></pre>
     </div>
 
     <h2>2. Distance Modes</h2>
     <p>
       Time-of-flight sensors support short, medium, and long distance modes that trade range for speed and measurement stability.
-      Short mode offers the fastest update rate and strongest signal return at close distances, making it well-suited for rapid collision
-      avoidance, but its maximum range is limited. Medium mode provides a balanced compromise between speed and distance. Long mode extends
-      the usable range substantially, which is advantageous for room-scale perception and mapping tasks, though it typically reduces update
-      frequency and may introduce slightly higher noise. For this project, long mode was selected because it still provides sufficient accuracy
-      at short distances while enabling the detection of distant obstacles that are more relevant for navigation.
+      Long mode was selected because it provides sufficient accuracy at short distances while enabling detection of distant obstacles
+      relevant for navigation.
     </p>
 
     <h2>3. Integration Notes</h2>
@@ -289,100 +199,63 @@
 
     <h3>4.1 Static and dynamic measurements</h3>
     <p>
-      Measurements were collected at three fixed distances as well as during continuous motion of the target. Across these tests, the sensors
-      exhibited a maximum variation of approximately 0.5 cm, indicating very low noise. During dynamic movement, the fluctuations were barely
-      perceptible, demonstrating stable real-time tracking performance.
-      <span class="muted">(insert 9.png on its own line, 5.png and 6.png next to each other, 7.png and 8.png next to each other)</span>
+      Measurements were collected at three fixed distances and during continuous motion. The sensors exhibited a maximum variation of
+      approximately 0.5 cm, indicating very low noise and stable real-time tracking.
     </p>
 
     <figure class="media-wrap">
-      <img class="media" src="../assets/lab3/9.png" alt="ToF measurements summary plot" />
-      <figcaption>Figure 9: Summary of ToF measurements. <span class="muted">(insert 9.png)</span></figcaption>
+      <img class="media" src="../assets/lab3/9.png" alt="Measurement summary plot" />
+      <figcaption>Figure 9: Summary of measurements.</figcaption>
     </figure>
 
     <div class="media-row">
       <figure class="media-wrap">
-        <img class="media" src="../assets/lab3/5.png" alt="Fixed distance test 1 plot" />
-        <figcaption>Figure 5: Fixed-distance test plot. <span class="muted">(insert 5.png)</span></figcaption>
+        <img class="media" src="../assets/lab3/5.png" alt="Fixed distance test" />
+        <figcaption>Figure 5: Fixed-distance test.</figcaption>
       </figure>
 
       <figure class="media-wrap">
-        <img class="media" src="../assets/lab3/6.png" alt="Fixed distance test 2 plot" />
-        <figcaption>Figure 6: Fixed-distance test plot. <span class="muted">(insert 6.png)</span></figcaption>
+        <img class="media" src="../assets/lab3/6.png" alt="Fixed distance test" />
+        <figcaption>Figure 6: Fixed-distance test.</figcaption>
       </figure>
     </div>
 
     <div class="media-row">
       <figure class="media-wrap">
-        <img class="media" src="../assets/lab3/7.png" alt="Dynamic motion test plot" />
-        <figcaption>Figure 7: Dynamic target motion plot. <span class="muted">(insert 7.png)</span></figcaption>
+        <img class="media" src="../assets/lab3/7.png" alt="Dynamic motion test" />
+        <figcaption>Figure 7: Dynamic motion test.</figcaption>
       </figure>
 
       <figure class="media-wrap">
-        <img class="media" src="../assets/lab3/8.png" alt="Dynamic motion test plot" />
-        <figcaption>Figure 8: Dynamic target motion plot. <span class="muted">(insert 8.png)</span></figcaption>
+        <img class="media" src="../assets/lab3/8.png" alt="Dynamic motion test" />
+        <figcaption>Figure 8: Dynamic motion test.</figcaption>
       </figure>
     </div>
 
-    <h3>4.2 Surface and lighting effects</h3>
-    <p>
-      Under controlled indoor lighting, smooth matte surfaces produced the most consistent readings because they return a strong, diffuse
-      infrared signal back to the receiver. Raised or “fluffy” textures tend to scatter the emitted light into many directions, reducing the
-      fraction that returns to the sensor and increasing jitter. Dark materials often absorb more infrared energy, lowering return strength and
-      making measurements less stable, especially near the upper end of the sensor’s range. Highly reflective surfaces can also cause failures,
-      since specular reflections can redirect the return away from the receiver or create multipath effects that lead to incorrect distances.
-      Bright ambient infrared (for example direct sunlight) can further degrade stability by increasing background noise in the receiver.
-    </p>
-
     <h2>5. Infrared Distance Sensor Types</h2>
     <p>
-      Infrared distance sensing can be implemented using several distinct techniques, most notably optical triangulation sensors and
-      time-of-flight modules. Triangulation devices project an infrared spot at a fixed angle and infer distance by measuring where the
-      reflected spot lands on an internal detector. They typically output an analog voltage that varies nonlinearly with distance. These sensors
-      are inexpensive and fast, but they have a limited useful range and can be sensitive to target angle, surface finish, and geometry.
-      Time-of-flight sensors instead emit short infrared pulses and compute distance from the measured travel time using on-board timing circuits
-      and digital processing. This approach supports longer ranges and often provides more repeatable measurements across different materials,
-      which is useful for robotics tasks like obstacle avoidance and mapping. The trade-offs are higher cost, more configuration and software
-      overhead, and usually a narrower field of view than simple triangulation sensors.
-    </p>
-
-    <h2>Discussion</h2>
-    <p>
-      The most important integration challenge in this lab was enabling two identical ToF sensors to share a single I²C bus. Using XSHUT to
-      temporarily disable one sensor during startup made it possible to reassign an address and bring both devices online reliably. After
-      configuration, the sensors produced stable readings with very small variation in both static and moving tests, indicating that the ToF
-      pipeline is suitable for real-time ranging on the robot.
+      Infrared distance sensing can be implemented using optical triangulation sensors or time-of-flight modules.
+      Triangulation sensors estimate distance from the angle of a reflected spot and typically output an analog signal.
+      Time-of-flight sensors measure the travel time of light pulses, providing a direct digital distance measurement with
+      longer range and greater repeatability, making them well suited for robotics applications.
     </p>
 
     <footer class="footer">
-      <p class="muted">© <span id="year"></span> Coby</p>
-      <p><a class="backlink" href="../collaboration.html">Collaboration Statement</a></p>
+      <p>© <span id="year"></span> Coby</p>
     </footer>
   </main>
 
   <script>
     document.getElementById("year").textContent = new Date().getFullYear();
 
-    // Copy button support (matches your Lab 2 behavior)
     document.querySelectorAll(".copybtn").forEach((btn) => {
       btn.addEventListener("click", async () => {
-        const targetId = btn.getAttribute("data-copy-target");
-        const el = document.getElementById(targetId);
-        if (!el) return;
-        const text = el.innerText || el.textContent || "";
-        try {
-          await navigator.clipboard.writeText(text);
-          const old = btn.textContent;
-          btn.textContent = "Copied";
-          setTimeout(() => (btn.textContent = old), 900);
-        } catch (e) {
-          const old = btn.textContent;
-          btn.textContent = "Copy failed";
-          setTimeout(() => (btn.textContent = old), 900);
-        }
+        const target = document.getElementById(btn.dataset.copyTarget);
+        await navigator.clipboard.writeText(target.innerText);
+        btn.textContent = "Copied";
+        setTimeout(() => (btn.textContent = "Copy"), 900);
       });
     });
   </script>
-  <script src="../site.js"></script>
 </body>
 </html>
