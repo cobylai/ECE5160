@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lab 4 | Motors &amp; PWM</title>
+  <meta name="description" content="ECE 5160 Spring 2026 Lab 4: Motors and PWM driving with DRV8833." />
+  <link rel="stylesheet" href="../style.css" />
+
+  <style>
+    /* Media must be max 1/4 window width */
+    .media-wrap { margin: 12px 0; }
+    figure.media-wrap { margin: 12px 0; }
+    .media {
+      display: block;
+      width: 100%;
+      max-width: 25vw;
+      border-radius: 12px;
+      border: 1px solid rgba(35,49,79,.7);
+      background: #000;
+    }
+    .media.portrait {
+      max-height: 25vw;
+      object-fit: contain;
+    }
+    figcaption {
+      margin-top: 8px;
+      font-size: 13px;
+      color: rgba(232,237,247,.78);
+    }
+
+    /* Code block language label in top-right corner */
+    .codeblock {
+      position: relative;
+      margin: 12px 0;
+      border: 1px solid rgba(35,49,79,.75);
+      border-radius: 16px;
+      background: rgba(15,22,38,.8);
+      overflow: hidden;
+    }
+    .codebadge {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(35,49,79,.9);
+      background: rgba(35,49,79,.25);
+      color: rgba(232,237,247,.95);
+      pointer-events: none;
+    }
+    .codeblock pre {
+      margin: 0;
+      padding: 14px;
+      padding-top: 44px;
+      overflow: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      color: rgba(232,237,247,.95);
+    }
+    .copybtn {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      padding: 8px 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(35,49,79,.9);
+      background: rgba(35,49,79,.25);
+      color: rgba(232,237,247,.95);
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .copybtn:hover {
+      border-color: rgba(122,167,255,.55);
+      background: rgba(122,167,255,.14);
+    }
+
+    /* Make sure the page still works on small screens */
+    @media (max-width: 700px) {
+      .media { max-width: 100%; }
+      .media.portrait { max-height: none; }
+    }
+  </style>
+</head>
+
+<body>
+  <header class="header">
+    <div class="wrap header__inner">
+      <div class="brand">
+        <div class="brand__logo" aria-hidden="true">🚗</div>
+        <div class="brand__text">
+          <h1>Fast Robots</h1>
+          <p>ECE 5160 Spring 2026</p>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a href="../labs.html">Labs</a>
+        <a href="../about.html">About</a>
+        <a href="../collaboration.html">Collaboration Statement</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap section lab">
+    <a class="backlink" href="../labs.html">← Back to Labs</a>
+
+    <h1>Lab 4: Motors &amp; PWM</h1>
+    <div class="date">Due: <span class="muted">TBD</span></div>
+
+    <h2>Overview</h2>
+    <p>
+      This lab adds dual DRV8833 motor drivers to the robot and characterizes how PWM duty cycle and motor supply voltage
+      affect wheel motion. Bench tests use the Artemis to generate PWM, an oscilloscope to visualize signals, and a series of
+      calibration scripts to find reliable drive and turn PWM levels for open-loop motion.
+    </p>
+
+    <h2>1. Prelab</h2>
+
+    <h3>1.1 Wiring diagram</h3>
+    <p>
+      Two DRV8833 motor drivers were added to control the left and right motors. Each driver is powered by an external battery
+      that supplies the motor voltage, while the Artemis provides PWM control signals and a shared ground reference. Motor control
+      lines are assigned to analog-capable pins A0–A3 to support PWM output.
+    </p>
+
+    <figure class="media-wrap">
+      <img class="media" src="../assets/lab4/wiringDiagram.png" alt="DRV8833 motor driver wiring and Artemis connections" />
+      <figcaption>Figure 1.1: Motor driver wiring with Artemis PWM pins A0–A3.</figcaption>
+    </figure>
+
+    <h2>2. Lab</h2>
+
+    <h3>2.1 PWM signal characterization</h3>
+    <p>
+      This video shows the oscilloscope setup and the observed PWM waveform during testing. It captures how the Artemis output
+      changes as the PWM duty cycle is ramped, providing a direct view of the signal that will later drive the motors through the
+      DRV8833.
+    </p>
+
+    <figure class="media-wrap">
+      <video class="media" controls>
+        <source src="../assets/lab4/scopePWM.mp4" type="video/mp4" />
+        Your browser does not support the video tag.
+      </video>
+      <figcaption>Video 2.1.1: Artemis PWM waveform observed on the oscilloscope.</figcaption>
+    </figure>
+
+    <figure class="media-wrap">
+      <video class="media" controls>
+        <source src="../assets/lab4/pwmout1.mp4" type="video/mp4" />
+        Your browser does not support the video tag.
+      </video>
+      <figcaption>Video 2.1.2: PWM signal going to the left motor driver.</figcaption>
+    </figure>
+
+    <figure class="media-wrap">
+      <video class="media" controls>
+        <source src="../assets/lab4/pwmout2.mp4" type="video/mp4" />
+        Your browser does not support the video tag.
+      </video>
+      <figcaption>Video 2.1.3: PWM signal going to the right motor driver.</figcaption>
+    </figure>
+
+    <h3>2.2 Motor supply voltage choice</h3>
+    <p>
+      The DRV8833 datasheet specifies a motor supply range of 2.7&nbsp;V to 10.8&nbsp;V. Since the robot will ultimately run from a
+      3.7&nbsp;V LiPo battery, the bench supply was set to 3.7&nbsp;V during testing so the motor behavior would match the actual
+      operating conditions as closely as possible.
+    </p>
+
+    <h3>2.3 PWM ramp test</h3>
+    <p>
+      This code configures two output pins, one held constantly high and one driven with PWM. In the main loop, the
+      <code>HIGH_PIN</code> is set to full output while <code>PWM_PIN</code> ramps from 0 to 254. This creates a gradually increasing
+      duty cycle on the PWM output, which is useful for observing how the signal changes on the oscilloscope and for testing how
+      increasing PWM affects motor response.
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-2-3-pwm-ramp">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-2-3-pwm-ramp"><code>#define HIGH_PIN 0
+#define PWM_PIN 1
+
+void setup() {
+  pinMode(HIGH_PIN, OUTPUT);
+  pinMode(PWM_PIN, OUTPUT);
+}
+
+void loop() {
+  analogWrite(HIGH_PIN, 255);
+  for (int i = 0; i &lt; 255; i++) {
+    analogWrite(PWM_PIN, i);
+  }
+}</code></pre>
+    </div>
+
+    <h3>2.4 Motor response to PWM</h3>
+    <p>
+      The same PWM ramp code was used while observing the motors directly.
+      The PWM signal directly controls the average voltage delivered to the motors by rapidly switching the output on and off.
+      As the duty cycle increases, the motors receive more effective power and spin faster. At low PWM values the motors may stall or
+      twitch, while at higher values the rotation becomes smoother and more consistent.
+    </p>
+
+    <figure class="media-wrap">
+      <video class="media" controls>
+        <source src="../assets/lab4/scopeMotors.mp4" type="video/mp4" />
+        Your browser does not support the video tag.
+      </video>
+      <figcaption>Video 2.4.1: Motor behavior as PWM duty cycle is ramped.</figcaption>
+    </figure>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-2-4-pwm-ramp">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-2-4-pwm-ramp"><code>#define HIGH_PIN 0
+#define PWM_PIN 1
+
+void setup() {
+  pinMode(HIGH_PIN, OUTPUT);
+  pinMode(PWM_PIN, OUTPUT);
+}
+
+void loop() {
+  analogWrite(HIGH_PIN, 255);
+  for (int i = 0; i &lt; 255; i++) {
+    analogWrite(PWM_PIN, i);
+  }
+}</code></pre>
+    </div>
+
+    <h3>2.5 Both wheels under PWM</h3>
+    <p>
+      Both wheels spin under the same PWM command, demonstrating that the two motor channels are receiving equivalent control signals.
+      This verifies that both drivers are wired correctly and that the motors respond similarly when given the same duty cycle.
+    </p>
+
+    <figure class="media-wrap">
+      <video class="media" controls>
+        <source src="../assets/lab4/bothWheels.mp4" type="video/mp4" />
+        Your browser does not support the video tag.
+      </video>
+      <figcaption>Video 2.5.1: Both wheels spinning under the same PWM command.</figcaption>
+    </figure>
+
+    <h3>2.6 Robot layout</h3>
+    <p>
+      This image shows the full car layout with the Artemis, motor drivers, battery, and wiring secured onto the chassis. The components
+      are arranged compactly and firmly mounted so the robot can move without loose connections or shifting hardware.
+    </p>
+
+    <figure class="media-wrap">
+      <img class="media" src="../assets/lab4/layout.png" alt="Robot layout with Artemis, DRV8833 drivers, battery, and wiring" />
+      <figcaption>Figure 2.6.1: Full car layout with electronics and wiring secured.</figcaption>
+    </figure>
+
+    <h3>2.7 Minimum PWM for straight driving</h3>
+    <p>
+      This code was used to determine the minimum PWM needed for the motors to reliably move the car on the ground. Testing showed that
+      the minimum PWM required to consistently overcome static friction and produce motion on the ground was approximately 40.
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-2-7-min-pwm">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-2-7-min-pwm"><code>#define L_HIGH 1
+#define L_PWM 0
+#define R_HIGH 2
+#define R_PWM 3
+
+const int PWM_MIN = 25;
+const int PWM_MAX = 40;
+const int INTERVALS = 5;
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(L_HIGH, OUTPUT);
+  pinMode(L_PWM, OUTPUT);
+  pinMode(R_HIGH, OUTPUT);
+  pinMode(R_PWM, OUTPUT);
+
+  // set motor directions
+  analogWrite(L_HIGH, 0); // left forward
+  analogWrite(R_HIGH, 0); // right reversed
+}</code></pre>
+    </div>
+
+    <figure class="media-wrap">
+      <video class="media" controls>
+        <source src="../assets/lab4/minSpeed.mp4" type="video/mp4" />
+        Your browser does not support the video tag.
+      </video>
+      <figcaption>Video 2.7.1: Determining minimum PWM for reliable straight-line motion.</figcaption>
+    </figure>
+
+    <h3>2.8 Open-loop straight driving</h3>
+    <p>
+      The car was already able to drive in a reasonably straight line without requiring additional calibration. Because the two motors
+      behaved similarly under the chosen PWM values, no extra correction factor was needed for this test. This was verified in the video.
+    </p>
+
+    <figure class="media-wrap">
+      <video class="media" controls>
+        <source src="../assets/lab4/driveStraight.mp4" type="video/mp4" />
+        Your browser does not support the video tag.
+      </video>
+      <figcaption>Video 2.8.1: Robot driving straight under open-loop PWM control.</figcaption>
+    </figure>
+
+    <h3>2.9 Open-loop drive and turn sequence</h3>
+    <p>
+      This demonstration uses open-loop control, meaning the robot follows a pre-programmed sequence of motor commands without any
+      sensor feedback. The code drives forward, pauses, executes a turn by commanding opposite wheel directions, pauses again, and
+      repeats the sequence. Since no encoder or IMU feedback is used, the robot does not correct for drift or accumulated error during
+      motion.
+    </p>
+
+    <figure class="media-wrap">
+      <video class="media" controls>
+        <source src="../assets/lab4/openloop.mp4" type="video/mp4" />
+        Your browser does not support the video tag.
+      </video>
+      <figcaption>Video 2.9.1: Open-loop drive–turn–drive sequence.</figcaption>
+    </figure>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-2-9-openloop">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-2-9-openloop"><code>#define L_REVERSE 1
+#define L_PWM 0
+#define R_REVERSE 2
+#define R_PWM 3
+
+const int DRIVE_PWM = 70;
+const int TURN_PWM = 160;
+
+void setup() {
+  pinMode(L_REVERSE, OUTPUT);
+  pinMode(L_PWM, OUTPUT);
+  pinMode(R_REVERSE, OUTPUT);
+  pinMode(R_PWM, OUTPUT);
+
+  analogWrite(L_REVERSE, 0);
+  analogWrite(R_REVERSE, 0);
+
+  analogWrite(L_PWM, DRIVE_PWM);
+  analogWrite(R_PWM, DRIVE_PWM);
+  delay(1000);
+
+  analogWrite(L_PWM, 0);
+  analogWrite(R_PWM, 0);
+  delay(500);
+
+  analogWrite(L_PWM, 0);
+  analogWrite(L_REVERSE, TURN_PWM);
+  analogWrite(R_PWM, TURN_PWM);
+  analogWrite(R_REVERSE, 0);
+  delay(150);
+
+  analogWrite(L_PWM, 0);
+  analogWrite(L_REVERSE, 0);
+  analogWrite(R_PWM, 0);
+  analogWrite(R_REVERSE, 0);
+  delay(500);
+
+  analogWrite(L_PWM, DRIVE_PWM);
+  analogWrite(L_REVERSE, 0);
+  analogWrite(R_PWM, DRIVE_PWM);
+  analogWrite(R_REVERSE, 0);
+  delay(1000);
+
+  analogWrite(L_PWM, 0);
+  analogWrite(L_REVERSE, 0);
+  analogWrite(R_PWM, 0);
+  analogWrite(R_REVERSE, 0);
+  delay(500);
+
+  analogWrite(L_PWM, TURN_PWM);
+  analogWrite(L_REVERSE, 0);
+  analogWrite(R_PWM, 0);
+  analogWrite(R_REVERSE, TURN_PWM);
+  delay(150);
+
+  analogWrite(L_PWM, 0);
+  analogWrite(L_REVERSE, 0);
+  analogWrite(R_PWM, 0);
+  analogWrite(R_REVERSE, 0);
+  delay(500);
+
+  analogWrite(L_PWM, DRIVE_PWM);
+  analogWrite(L_REVERSE, 0);
+  analogWrite(R_PWM, DRIVE_PWM);
+  analogWrite(R_REVERSE, 0);
+  delay(1000);
+
+  analogWrite(L_PWM, 0);
+  analogWrite(L_REVERSE, 0);
+  analogWrite(R_PWM, 0);
+  analogWrite(R_REVERSE, 0);
+}
+
+void loop() {
+}</code></pre>
+    </div>
+
+    <h3>2.10 PWM frequency discussion</h3>
+    <p>
+      The default <code>analogWrite</code> frequency is adequate for these motors, so manually increasing the PWM frequency is not
+      strictly necessary for basic operation. The motors respond well at the standard rate, and the existing signal is fast enough that
+      the mechanical system averages it into smooth motion. A higher PWM frequency could reduce audible noise and potentially make the
+      motor current smoother, but for this lab it would not provide a major practical advantage.
+    </p>
+
+    <h3>2.11 Turn-in-place calibration</h3>
+    <p>
+      This calibration script was used to determine the minimum PWM values required for turning in place. Testing showed that the robot
+      needed a startup PWM of approximately 140 to overcome static friction and begin rotating, while a lower PWM of approximately 110
+      was sufficient to maintain the turn once the wheels were already moving. The brief higher-power kick starts the rotation, and the
+      reduced holding PWM keeps the turn going without applying unnecessary extra power.
+    </p>
+
+    <figure class="media-wrap">
+      <video class="media" controls>
+        <source src="../assets/lab4/turnCalibration.mp4" type="video/mp4" />
+        Your browser does not support the video tag.
+      </video>
+      <figcaption>Video 2.11.1: Turn-in-place PWM calibration.</figcaption>
+    </figure>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-2-11-turn-cal">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-2-11-turn-cal"><code>#define L_REV 1
+#define L_FWD 0
+#define R_REV 2
+#define R_FWD 3
+
+const int PWM_MIN = 110;
+const int PWM_MAX = 150;
+const int STEP = 5;
+const int KICK_MS = 250;
+const int HOLD_MS = 1500;
+const int PAUSE_MS = 800;
+
+void setup() {
+  pinMode(L_FWD, OUTPUT);
+  pinMode(L_REV, OUTPUT);
+  pinMode(R_FWD, OUTPUT);
+  pinMode(R_REV, OUTPUT);
+
+  analogWrite(L_FWD, 0); analogWrite(L_REV, 0);
+  analogWrite(R_FWD, 0); analogWrite(R_REV, 0);
+}
+
+void loop() {
+  for (int run_pwm = PWM_MIN; run_pwm &lt;= PWM_MAX; run_pwm += STEP) {
+    int kick_pwm = run_pwm + 30;
+    if (kick_pwm &gt; 255) kick_pwm = 255;
+
+    analogWrite(L_FWD, kick_pwm); analogWrite(L_REV, 0);
+    analogWrite(R_FWD, 0);        analogWrite(R_REV, kick_pwm);
+    delay(KICK_MS);
+
+    analogWrite(L_FWD, run_pwm); analogWrite(L_REV, 0);
+    analogWrite(R_FWD, 0);       analogWrite(R_REV, run_pwm);
+    delay(HOLD_MS);
+
+    analogWrite(L_FWD, 0); analogWrite(L_REV, 0);
+    analogWrite(R_FWD, 0); analogWrite(R_REV, 0);
+    delay(PAUSE_MS);
+
+    analogWrite(L_FWD, 0);       analogWrite(L_REV, kick_pwm);
+    analogWrite(R_FWD, kick_pwm); analogWrite(R_REV, 0);
+    delay(KICK_MS);
+
+    analogWrite(L_FWD, 0);       analogWrite(L_REV, run_pwm);
+    analogWrite(R_FWD, run_pwm); analogWrite(R_REV, 0);
+    delay(HOLD_MS);
+
+    analogWrite(L_FWD, 0); analogWrite(L_REV, 0);
+    analogWrite(R_FWD, 0); analogWrite(R_REV, 0);
+    delay(PAUSE_MS);
+  }
+}</code></pre>
+    </div>
+
+    <footer class="footer">
+      <p class="muted">© <span id="year"></span> Coby</p>
+      <p><a class="backlink" href="../collaboration.html">Collaboration Statement</a></p>
+    </footer>
+  </main>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+  <script src="../site.js"></script>
+</body>
+</html>
+
