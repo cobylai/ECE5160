@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lab 5 | PID Wall Approach</title>
+  <meta name="description" content="ECE 5160 Spring 2026 Lab 5: PID wall approach with Bluetooth, ToF, and anti-windup." />
+  <link rel="stylesheet" href="../style.css" />
+
+  <style>
+    /* Media must be max 1/4 window width */
+    .media-wrap { margin: 12px 0; }
+    figure.media-wrap { margin: 12px 0; }
+    .media {
+      display: block;
+      width: 100%;
+      max-width: 25vw;
+      border-radius: 12px;
+      border: 1px solid rgba(35,49,79,.7);
+      background: #000;
+    }
+    .media.portrait {
+      max-height: 25vw;
+      object-fit: contain;
+    }
+    figcaption {
+      margin-top: 8px;
+      font-size: 13px;
+      color: rgba(232,237,247,.78);
+    }
+
+    /* Code block language label in top-right corner */
+    .codeblock {
+      position: relative;
+      margin: 12px 0;
+      border: 1px solid rgba(35,49,79,.75);
+      border-radius: 16px;
+      background: rgba(15,22,38,.8);
+      overflow: hidden;
+    }
+    .codebadge {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(35,49,79,.9);
+      background: rgba(35,49,79,.25);
+      color: rgba(232,237,247,.95);
+      pointer-events: none;
+    }
+    .codeblock pre {
+      margin: 0;
+      padding: 14px;
+      padding-top: 44px;
+      overflow: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      color: rgba(232,237,247,.95);
+    }
+    .copybtn {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      padding: 8px 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(35,49,79,.9);
+      background: rgba(35,49,79,.25);
+      color: rgba(232,237,247,.95);
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .copybtn:hover {
+      border-color: rgba(122,167,255,.55);
+      background: rgba(122,167,255,.14);
+    }
+
+    /* Make sure the page still works on small screens */
+    @media (max-width: 700px) {
+      .media { max-width: 100%; }
+      .media.portrait { max-height: none; }
+    }
+  </style>
+</head>
+
+<body>
+  <header class="header">
+    <div class="wrap header__inner">
+      <div class="brand">
+        <div class="brand__logo" aria-hidden="true">🚗</div>
+        <div class="brand__text">
+          <h1>Fast Robots</h1>
+          <p>ECE 5160 Spring 2026</p>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a href="../labs.html">Labs</a>
+        <a href="../about.html">About</a>
+        <a href="../collaboration.html">Collaboration Statement</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap section lab">
+    <a class="backlink" href="../labs.html">← Back to Labs</a>
+
+    <h1>Lab 5: PID Wall Approach</h1>
+    <div class="date">Due: <span class="muted">TBD</span></div>
+
+    <h2>Overview</h2>
+    <p>
+      This lab implements a PID controller that drives the robot toward a wall and stops at a target distance (~304&nbsp;mm) using
+      time-of-flight sensor feedback. Control is triggered and logged remotely over Bluetooth; the robot runs the PID loop on-board
+      and sends logged data back for analysis. The report covers Bluetooth communication, data logging, position control, motor
+      output mapping, PID tuning, range/sampling time, controller performance, robustness tests, integrator wind-up protection
+      (5000-level), and the safety hard-stop mechanism.
+    </p>
+    <p>
+      If any media isn't working, you can view it using this link:
+      <a href="https://github.com/cobylai/ECE5160/tree/main/assets/lab%205" target="_blank" rel="noopener noreferrer">
+        https://github.com/cobylai/ECE5160/tree/main/assets/lab 5
+      </a>.
+    </p>
+
+    <h2>Prelab — Bluetooth Communication</h2>
+    <p>
+      The robot control system was designed so that all experiments could be triggered and logged remotely over Bluetooth. A Python
+      script running on the computer connects to the Artemis board using BLE and sends a command that starts the wall approach
+      controller. The command payload includes the controller parameters such as the setpoint distance, PID gains, controller
+      duration, and motor limits.
+    </p>
+    <p>
+      When the command is received by the Artemis, it parses the payload and activates the wall controller. During execution the
+      robot runs the PID loop locally and stores debugging data in arrays. Logging locally ensures that Bluetooth communication
+      does not slow down the control loop.
+    </p>
+    <p>
+      The robot records several values at each loop iteration including the timestamp, estimated distance to the wall from the ToF
+      sensor, the normalized error used by the controller, and the signed motor command applied to the motors.
+    </p>
+    <p>
+      After the run finishes the Artemis sends all logged data back to the computer over BLE. The Python script subscribes to the
+      notification characteristic, parses the received messages, and stores them in arrays for plotting and analysis.
+    </p>
+    <p>
+      To guarantee safe operation, the controller also includes a hard stop mechanism implemented directly on the Artemis. The
+      control loop terminates once the specified duration has elapsed or if the controller state is disabled, and the motors are
+      explicitly stopped so the robot cannot continue moving even if the Bluetooth connection fails.
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-ble-start">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-ble-start"><code>// BLE_START_TRIGGER
+void read_data() {
+  if (rx_characteristic_string.written()) {
+    handle_command();
+  }
+}
+
+case WALL_START: {
+  wall_active = true;
+  wall_stop_requested = false;
+  wall_log_count = 0;
+}</code></pre>
+    </div>
+
+    <p>
+      The debugging data collected during the run are transmitted back to the computer after the controller finishes. Each logged
+      data point is formatted as a string and sent through the BLE characteristic so the Python program can reconstruct the
+      experiment data.
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-ble-data">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-ble-data"><code>// BLE_DATA_TRANSMISSION
+for (int i = 0; i &lt; wall_log_count; i++) {
+  tx_estring_value.clear();
+  tx_estring_value.append("WALL:");
+  tx_estring_value.append(wall_t_ms[i]);
+  tx_estring_value.append(",");
+  tx_estring_value.append(wall_dist_mm[i]);
+  tx_estring_value.append(",");
+  tx_estring_value.append(wall_err[i]);
+  tx_estring_value.append(",");
+  tx_estring_value.append(wall_pwm_signed[i]);
+  tx_characteristic_string.writeValue(tx_estring_value.c_str());
+  delay(10);
+}</code></pre>
+    </div>
+
+    <p>
+      On the computer side, the Python script receives these messages through a BLE notification handler. Each message is parsed
+      and appended to arrays that will later be used to generate plots.
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="py-ble-receive">Copy</button>
+      <span class="codebadge">Python</span>
+      <pre id="py-ble-receive"><code># PYTHON_BLE_RECEIVE
+wall_t_ms = []
+wall_dist_mm = []
+wall_err = []
+wall_pwm = []
+
+def wall_notification_handler(uuid, byteArray):
+    raw = ble.bytearray_to_string(byteArray).strip()
+    if not raw.startswith("WALL:"):
+        return
+
+    rest = raw[5:]
+    parts = rest.split(",")
+
+    t_ms = int(parts[0])
+    dist = int(parts[1])
+    err = float(parts[2])
+    pwm = int(parts[3])
+
+    wall_t_ms.append(t_ms)
+    wall_dist_mm.append(dist)
+    wall_err.append(err)
+    wall_pwm.append(pwm)</code></pre>
+    </div>
+
+    <h2>Data Logging</h2>
+    <p>
+      During the controller execution, debugging information is stored locally in arrays on the Artemis. These arrays hold the time
+      of each sample, the estimated distance from the wall, the controller error, and the signed motor command.
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-data-arrays">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-data-arrays"><code>// DATA_LOG_ARRAYS
+static const int wall_log_len = 2000;
+static int wall_t_ms[wall_log_len];
+static int wall_dist_mm[wall_log_len];
+static float wall_err[wall_log_len];
+static int wall_pwm_signed[wall_log_len];
+static int wall_log_count = 0;</code></pre>
+    </div>
+
+    <p>
+      Each iteration of the control loop records the current values into the logging arrays. This ensures that all relevant
+      information from the experiment is captured without interrupting the control loop timing.
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-data-write">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-data-write"><code>// DATA_LOG_WRITE
+if (wall_log_count &lt; wall_log_len) {
+  wall_t_ms[wall_log_count] = now_ms;
+  wall_dist_mm[wall_log_count] = (int)lroundf(dist_est);
+  wall_err[wall_log_count] = error;
+  wall_pwm_signed[wall_log_count] = signed_pwm;
+  wall_log_count++;
+}</code></pre>
+    </div>
+
+    <h2>Position Control</h2>
+    <p>
+      The objective of this lab is to drive the robot toward a wall and stop at a target distance of approximately 304&nbsp;mm. The
+      robot uses feedback from a time-of-flight sensor to measure the distance to the wall and adjusts its motor output accordingly.
+    </p>
+    <p>
+      A PID controller is used to compute the motor command based on the difference between the measured distance and the target
+      setpoint. The controller operates on a normalized distance error so that the gains remain consistent for different setpoints.
+    </p>
+    <p>
+      The proportional term generates a control effort proportional to the current error, which drives the robot toward the wall. The
+      derivative term provides damping by responding to the rate of change of the error. The integral term accumulates small
+      residual errors caused by motor deadband or friction and helps eliminate steady-state offset.
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-pid">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-pid"><code>// PID_CONTROLLER
+error = (dist_est - (float)setpoint_mm) / (float)setpoint_mm;
+
+float integ_candidate = integ + error * dt_s;
+float deriv = (error - prev_err) / dt_s;
+
+float u_unclamped = kp * error + ki * integ_candidate + kd * deriv;
+float u = u_unclamped;</code></pre>
+    </div>
+
+    <h2>Motor Output Mapping</h2>
+    <p>
+      The PID output must be converted into a motor command that the driver can execute. The controller output is first clamped to
+      the allowed PWM range. If the output magnitude is smaller than the motor deadband threshold, the command is raised to a
+      minimum value so that the motors overcome static friction.
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-motor-mapping">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-motor-mapping"><code>// MOTOR_OUTPUT_MAPPING
+int u_pwm = (int)lroundf(u);
+u_pwm = clamp_int(u_pwm, -max_pwm, max_pwm);
+
+if (u_pwm != 0 &amp;&amp; abs_error &gt; deadband) {
+  int mag = u_pwm &gt; 0 ? u_pwm : -u_pwm;
+  if (mag &lt; min_pwm) u_pwm = (u_pwm &gt; 0) ? min_pwm : -min_pwm;
+}</code></pre>
+    </div>
+
+    <h2>PID Tuning</h2>
+    <p>
+      The controller gains were tuned experimentally by observing the robot’s response under different parameter settings.
+    </p>
+    <p>
+      When the proportional gain is too low the robot approaches the wall very slowly and does not effectively reduce the error.
+      This behavior is shown in the first graph.
+    </p>
+
+    <figure class="media-wrap">
+      <img class="media" src="../assets/lab5/1.png" alt="Low proportional gain: slow approach, poor error reduction" />
+      <figcaption>Figure: Low Kp — slow approach.</figcaption>
+    </figure>
+
+    <p>
+      When the proportional gain is too high the controller overreacts to the error and causes oscillations near the setpoint.
+    </p>
+
+    <figure class="media-wrap">
+      <img class="media" src="../assets/lab5/2.png" alt="High proportional gain: oscillations near setpoint" />
+      <figcaption>Figure: High Kp — oscillations.</figcaption>
+    </figure>
+
+    <p>
+      If the derivative gain is too small the system becomes underdamped and continues oscillating around the setpoint before
+      settling.
+    </p>
+
+    <figure class="media-wrap">
+      <img class="media" src="../assets/lab5/3.png" alt="Low derivative gain: underdamped oscillation" />
+      <figcaption>Figure: Low Kd — underdamped oscillation.</figcaption>
+    </figure>
+
+    <p>
+      After tuning the controller gains, the system approaches the wall quickly and settles smoothly near the desired setpoint.
+    </p>
+
+    <figure class="media-wrap">
+      <img class="media" src="../assets/lab5/4.png" alt="Tuned PID: fast approach and smooth settling" />
+      <figcaption>Figure: Tuned gains — fast approach, smooth settling.</figcaption>
+    </figure>
+
+    <h2>Range and Sampling Time</h2>
+    <p>
+      The robot measures distance using a VL53L1X time-of-flight sensor configured in short-range mode. Short-range mode provides
+      faster update rates which improves controller responsiveness when approaching the wall.
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-tof-config">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-tof-config"><code>// TOF_CONFIGURATION
+distanceSensor1.setDistanceModeShort();
+distanceSensor2.setDistanceModeShort();</code></pre>
+    </div>
+
+    <p>
+      The PID control loop runs at approximately 50&nbsp;Hz, corresponding to a loop period of about 20&nbsp;ms. The ToF sensor
+      produces measurements at a slower rate determined by its internal integration timing. When a new sensor measurement becomes
+      available it is used to update the distance estimate; otherwise the controller continues using the most recent estimate.
+    </p>
+    <p>
+      Running the control loop faster than the sensor update rate reduces the effect of sensor latency and allows the controller to
+      react more quickly to changes in the robot’s motion.
+    </p>
+
+    <h2>Controller Performance</h2>
+    <p>
+      The performance of the controller can be visualized by plotting the logged data from a successful run.
+    </p>
+    <p>
+      The first plot shows the robot’s distance from the wall as a function of time. The distance decreases rapidly at the beginning
+      of the run and gradually converges to the setpoint as the controller slows the robot.
+    </p>
+
+    <figure class="media-wrap">
+      <img class="media" src="../assets/lab5/tof_vs_time.png" alt="Distance to wall vs time" />
+      <figcaption>Figure: ToF distance vs time.</figcaption>
+    </figure>
+
+    <p>
+      The second plot shows the motor command produced by the controller. The command starts at a relatively high value and
+      decreases as the robot approaches the wall and the error becomes smaller.
+    </p>
+
+    <figure class="media-wrap">
+      <img class="media" src="../assets/lab5/motor_vs_time.png" alt="Motor command vs time" />
+      <figcaption>Figure: Motor command vs time.</figcaption>
+    </figure>
+
+    <h2>Robustness Demonstration</h2>
+    <p>
+      To demonstrate reliability, the robot was tested under several conditions. In one experiment the robot started far from the
+      wall, while in another it started much closer. In both cases the controller successfully drove the robot to the target
+      distance.
+    </p>
+    <p>
+      A perturbation test was also performed in which the robot was pushed toward or away from the wall during operation. The
+      controller responded by adjusting the motor output and returning the robot to the desired setpoint.
+    </p>
+
+    <figure class="media-wrap">
+      <video class="media" controls>
+        <source src="../assets/lab5/run_long.mp4" type="video/mp4" />
+        Your browser does not support the video tag.
+      </video>
+      <figcaption>Video: Long-distance start.</figcaption>
+    </figure>
+
+    <figure class="media-wrap">
+      <video class="media" controls>
+        <source src="../assets/lab5/run_short.mp4" type="video/mp4" />
+        Your browser does not support the video tag.
+      </video>
+      <figcaption>Video: Short-distance start.</figcaption>
+    </figure>
+
+    <figure class="media-wrap">
+      <video class="media" controls>
+        <source src="../assets/lab5/run_perturbation.mp4" type="video/mp4" />
+        Your browser does not support the video tag.
+      </video>
+      <figcaption>Video: Perturbation test.</figcaption>
+    </figure>
+
+    <h2>5000-Level Requirement — Integrator Wind-Up Protection</h2>
+    <p>
+      Integrator wind-up occurs when the integral term continues accumulating error while the actuator output is saturated. Because
+      the motor command cannot exceed its maximum value, the integrator may grow very large and cause excessive overshoot once the
+      system becomes responsive again.
+    </p>
+    <p>
+      To prevent this behavior the controller includes an anti-windup mechanism that limits when the integral term is updated. If
+      the controller output is already saturated and the error would push the output further in the same direction, the integrator
+      update is temporarily disabled. This prevents the accumulation of large integral values while the motors are operating at
+      their limits.
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-antiwindup">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-antiwindup"><code>// INTEGRATOR_WINDUP_PROTECTION
+bool saturated_high = (u_pwm &gt;= max_pwm);
+bool saturated_low  = (u_pwm &lt;= -max_pwm);
+
+bool pushing_high   = (u_unclamped &gt; (float)max_pwm &amp;&amp; error &gt; 0.0f);
+bool pushing_low    = (u_unclamped &lt; (float)(-max_pwm) &amp;&amp; error &lt; 0.0f);
+
+bool allow_integ = true;
+
+if ((saturated_high &amp;&amp; pushing_high) || (saturated_low &amp;&amp; pushing_low)) {
+  allow_integ = false;
+}
+
+if (allow_integ) {
+  integ = integ_candidate;
+}</code></pre>
+    </div>
+
+    <p>
+      This strategy improves controller stability by preventing the integral term from dominating the controller output when the
+      motors are already saturated.
+    </p>
+
+    <h2>Safety Mechanism</h2>
+    <p>
+      The controller also includes a safety mechanism that ensures the robot stops after the specified duration or if the controller
+      is disabled. When the control loop exits, the motors are immediately stopped to prevent unintended motion.
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-safety">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-safety"><code>// SAFETY_HARD_STOP
+while (wall_active &amp;&amp; !wall_stop_requested &amp;&amp;
+      (millis() - start_time) &lt; (unsigned long)duration_ms) {
+
+  BLE.poll();
+  delay((unsigned long)poll_time_ms);
+}
+
+wall_stop_requested = true;
+wall_active = false;
+motors_coast();</code></pre>
+    </div>
+
+    <footer class="footer">
+      <p class="muted">© <span id="year"></span> Coby</p>
+      <p><a class="backlink" href="../collaboration.html">Collaboration Statement</a></p>
+    </footer>
+  </main>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+  <script src="../site.js"></script>
+</body>
+</html>
