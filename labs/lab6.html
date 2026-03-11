@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lab 6 | Yaw PID Control</title>
+  <meta name="description" content="ECE 5160 Spring 2026 Lab 6: yaw PID controller with Bluetooth telemetry, sampling analysis, and anti-windup." />
+  <link rel="stylesheet" href="../style.css" />
+
+  <style>
+    /* Media must be max 1/4 window width */
+    .media-wrap { margin: 12px 0; }
+    figure.media-wrap { margin: 12px 0; }
+    .media {
+      display: block;
+      width: 100%;
+      max-width: 25vw;
+      border-radius: 12px;
+      border: 1px solid rgba(35,49,79,.7);
+      background: #000;
+    }
+    .media.portrait {
+      max-height: 25vw;
+      object-fit: contain;
+    }
+    figcaption {
+      margin-top: 8px;
+      font-size: 13px;
+      color: rgba(232,237,247,.78);
+    }
+
+    /* Code block language label in top-right corner */
+    .codeblock {
+      position: relative;
+      margin: 12px 0;
+      border: 1px solid rgba(35,49,79,.75);
+      border-radius: 16px;
+      background: rgba(15,22,38,.8);
+      overflow: hidden;
+    }
+    .codebadge {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(35,49,79,.9);
+      background: rgba(35,49,79,.25);
+      color: rgba(232,237,247,.95);
+      pointer-events: none;
+    }
+    .codeblock pre {
+      margin: 0;
+      padding: 14px;
+      padding-top: 44px;
+      overflow: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      color: rgba(232,237,247,.95);
+    }
+    .copybtn {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      padding: 8px 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(35,49,79,.9);
+      background: rgba(35,49,79,.25);
+      color: rgba(232,237,247,.95);
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .copybtn:hover {
+      border-color: rgba(122,167,255,.55);
+      background: rgba(122,167,255,.14);
+    }
+
+    /* Make sure the page still works on small screens */
+    @media (max-width: 700px) {
+      .media { max-width: 100%; }
+      .media.portrait { max-height: none; }
+    }
+  </style>
+</head>
+
+<body>
+  <header class="header">
+    <div class="wrap header__inner">
+      <div class="brand">
+        <div class="brand__logo" aria-hidden="true">🚗</div>
+        <div class="brand__text">
+          <h1>Fast Robots</h1>
+          <p>ECE 5160 Spring 2026</p>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a href="../labs.html">Labs</a>
+        <a href="../about.html">About</a>
+        <a href="../collaboration.html">Collaboration Statement</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap section lab">
+    <a class="backlink" href="../labs.html">← Back to Labs</a>
+
+    <h1>Lab 6: Yaw PID Control</h1>
+    <div class="date">Due: <span class="muted">TBD</span></div>
+
+    <h2>Overview</h2>
+    <p>
+      This lab implements a PID controller to regulate the robot&apos;s yaw angle to a commanded setpoint using IMU feedback. A Python
+      notebook triggers the experiment over Bluetooth, sends the controller parameters (setpoint, gains, loop period, duration, PWM
+      limits), and subscribes to telemetry streamed back from the Artemis. The on-board controller runs a full PID loop on yaw angle,
+      logs P/I/D terms and motor commands, and returns the data for post-processing.
+    </p>
+    <p>
+      The report covers Bluetooth communication, PID structure and gain selection, sampling time and timing behavior, experimental
+      results (yaw vs time, motor commands, and controller terms), and the anti-windup strategy used to keep the controller stable
+      even when the motors saturate.
+    </p>
+    <p>
+      If any media isn&apos;t working, you can view it using this link:
+      <a href="https://github.com/cobylai/ECE5160/tree/main/assets/lab6" target="_blank" rel="noopener noreferrer">
+        https://github.com/cobylai/ECE5160/tree/main/assets/lab6
+      </a>.
+    </p>
+
+    <h2>Prelab — Bluetooth Communication</h2>
+    <p>
+      The yaw PID experiment is controlled over BLE using string characteristics. On the Artemis, a BLE service exposes a receive
+      characteristic for commands and a transmit characteristic for telemetry. In <code>ble_arduino.ino</code>, the
+      <code>read_data()</code> function checks whether the RX string characteristic was written and, if so, calls
+      <code>handle_command()</code> to parse and execute the incoming command.
+    </p>
+    <p>
+      Commands are encoded as a type plus a payload. For yaw control, Python sends a command with numeric type <code>13</code>. In
+      the Arduino code this is handled by the <code>YAW_PID_START</code> case in the command switch statement, while on the Python side
+      the same numeric command is named <code>CMD.RUN_PID</code>. Although the symbolic names differ, the shared numeric ID keeps the
+      protocol consistent.
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-ble-read">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-ble-read"><code>// BLE_RECEIVE_AND_DISPATCH
+void read_data() {
+  if (rx_characteristic_string.written()) {
+    handle_command();
+  }
+}
+
+void handle_command() {
+  robot_cmd.set_cmd_string(rx_characteristic_string.value(),
+                           rx_characteristic_string.valueLength());
+  int cmd_type = -1;
+  bool success = robot_cmd.get_command_type(cmd_type);
+  if (!success) return;
+
+  switch (cmd_type) {
+    case YAW_PID_START: {
+      // parse yaw setpoint and PID parameters, then run controller
+      break;
+    }
+  }
+}</code></pre>
+    </div>
+
+    <p>
+      Inside the <code>YAW_PID_START</code> case, the Artemis parses the payload fields containing the yaw setpoint, PID gains, run
+      duration, PWM limits, and loop period. It then executes a blocking PID loop that logs telemetry locally into arrays and later
+      streams the logs back as BLE notifications. During this blocking run, inbound commands are not processed again until the
+      handler returns, so live tuning within a single run is not supported in the current implementation.
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-ble-yaw-start">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-ble-yaw-start"><code>// YAW_PID_COMMAND_PARSE (simplified)
+case YAW_PID_START: {
+  int   setpoint_deg = 0;
+  float kp = 0, ki = 0, kd = 0;
+  int   duration_ms = 0;
+  int   min_pwm = 0, max_pwm = 0;
+  int   loop_period_ms = 10;
+
+  if (!robot_cmd.get_next_value(setpoint_deg)) break;
+  if (!robot_cmd.get_next_value(kp)) break;
+  robot_cmd.get_next_value(ki);
+  robot_cmd.get_next_value(kd);
+  robot_cmd.get_next_value(duration_ms);
+  robot_cmd.get_next_value(min_pwm);
+  robot_cmd.get_next_value(max_pwm);
+  robot_cmd.get_next_value(loop_period_ms);
+
+  // run yaw PID loop here and log telemetry
+}</code></pre>
+    </div>
+
+    <p>
+      On the Python side, the BLE helper connects to the Artemis, subscribes to the TX characteristic for notifications, and registers
+      a handler that parses each telemetry string into numeric arrays. The notebook then sends the <code>CMD.RUN_PID</code> command
+      with the chosen gains and parameters, waits for the run to finish, and uses the logged data for plotting.
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="py-ble-yaw">Copy</button>
+      <span class="codebadge">Python</span>
+      <pre id="py-ble-yaw"><code># PYTHON_BLE_COMMAND_AND_TELEMETRY (simplified)
+ble = get_ble_controller()
+ble.connect()
+
+data_time = []
+data_yaw = []
+data_kp_term = []
+data_ki_term = []
+data_windup_term = []
+data_kd_term = []
+data_total_term = []
+data_motor_pwm = []
+
+def data_handler(_uuid, payload: bytearray):
+    s = payload.decode().strip()
+    parsed = parse_pid_data(s)
+    if parsed is None:
+        return
+    (t_s, ready, angle_deg,
+     kp_t, ki_t, windup_t,
+     kd_t, total_t, pwm) = parsed
+    data_time.append(t_s)
+    data_yaw.append(angle_deg)
+    data_kp_term.append(kp_t)
+    data_ki_term.append(ki_t)
+    data_windup_term.append(windup_t)
+    data_kd_term.append(kd_t)
+    data_total_term.append(total_t)
+    data_motor_pwm.append(pwm)
+
+setpoint_deg = 90
+kp, ki, kd = 1.5, 0.6, 0.0
+duration_ms = 4000
+min_pwm, max_pwm = 85, 130
+
+payload = f"{int(setpoint_deg)}|{kp}|{ki}|{kd}|{duration_ms}|{min_pwm}|{max_pwm}"
+ble.start_notify(ble.uuid["RX_STRING"], data_handler)
+ble.send_command(CMD.RUN_PID, payload)</code></pre>
+    </div>
+
+    <h2>PID Controller Design and Tuning</h2>
+    <p>
+      The yaw controller is implemented as a full PID controller with runtime-configurable gains. The proportional term drives the
+      heading error toward zero, the integral term compensates for bias and friction, and the derivative term (if enabled) adds
+      damping based on the rate of change of the error. In the final configuration for this lab, the derivative gain is kept at zero
+      so the controller acts as a PI controller, which avoids amplifying IMU noise.
+    </p>
+    <p>
+      The control law uses the yaw angle estimated from the gyro as the feedback signal. The error is computed as the difference
+      between the desired yaw setpoint (in degrees) and the filtered yaw angle. The proportional, integral, and derivative terms are
+      combined into a total control effort that is later mapped into a signed PWM command for the motors.
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-pid-yaw">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-pid-yaw"><code>// YAW_PID_CONTROLLER (simplified)
+float error = yaw_setpoint_deg - used_angle_deg;
+float kp_term = yaw_kp * error;
+
+// integrate error with anti-windup (see later section)
+yaw_integral_unclamped += error * dt_s;
+
+float kd_term = yaw_kd * (error - yaw_prev_error) / dt_s;
+
+float u_unclamped = kp_term + yaw_ki * yaw_integral_unclamped + kd_term;
+float u_clamped = u_unclamped;
+if (u_clamped >  yaw_max_pwm) u_clamped =  yaw_max_pwm;
+if (u_clamped < -yaw_max_pwm) u_clamped = -yaw_max_pwm;</code></pre>
+    </div>
+
+    <p>
+      A typical tuned set of gains used in the lab notebook is <code>Kp = 1.5</code>, <code>Ki = 0.6</code>, and <code>Kd = 0.0</code>
+      with a yaw setpoint of about <code>90°</code> and PWM limits between <code>85</code> and <code>130</code>. With these values the
+      robot turns briskly toward the desired heading, eliminates steady-state error without excessive overshoot, and avoids the noise
+      sensitivity that can appear when derivative action is added on the raw yaw signal.
+    </p>
+
+    <h2>Range and Sampling Time</h2>
+    <p>
+      The yaw controller&apos;s timing is based on a measured loop period using microsecond timestamps. At each iteration, the code
+      computes <code>dt</code> from <code>micros()</code> and uses this value to integrate the gyro rate and update the yaw estimate.
+      The loop also enforces a nominal period using a delay, and waits for the IMU to report that new data is ready before reading
+      sensor values.
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-timing">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-timing"><code>// YAW_LOOP_TIMING (simplified)
+unsigned long now_us = micros();
+float dt_s = ((float)(now_us - yaw_last_time_us)) / 1000000.0f;
+if (dt_s <= 0.0f) {
+  dt_s = yaw_loop_period_ms / 1000.0f;
+}
+yaw_last_time_us = now_us;
+
+// wait briefly for new IMU data
+unsigned long wait_start = millis();
+while (!myICM.dataReady() && (millis() - wait_start) < 50) {}
+
+if (myICM.dataReady()) {
+  myICM.getAGMT();
+  float gz = myICM.gyrZ();  // deg/s
+  yaw_gyro_deg += gz * dt_s;
+}
+
+delay((unsigned long)yaw_loop_period_ms);</code></pre>
+    </div>
+
+    <p>
+      Nominally the controller is configured for a loop period on the order of 10&nbsp;ms, but the effective sampling time can be
+      longer when the IMU is slow to provide new data or when BLE logging at the end of the run introduces overhead. In the analysis
+      notebook, the <code>data_time</code> array is used to reconstruct the actual sampling interval, which can be compared against
+      the desired period to understand timing jitter and its impact on controller performance.
+    </p>
+
+    <h2>Experimental Results — Yaw vs Time</h2>
+    <p>
+      The BLE telemetry includes the yaw angle, P/I/D terms, total control effort, and signed motor PWM command at each controller
+      iteration. In the combined plot below, the top panel shows <code>θ(t)</code> with the setpoint overlay, the middle panel shows the
+      signed PWM command, and the bottom panel shows the individual P/I/D contributions, which together make it easy to analyze rise
+      time, overshoot, settling time, and steady-state error.
+    </p>
+
+    <figure class="media-wrap">
+      <img class="media" src="../assets/lab6/graph.png" alt="Combined yaw, PWM, and PID-term plots vs time" />
+      <figcaption>Figure: Combined plot of yaw angle with setpoint, signed PWM command, and P/I/D term breakdown vs time for a yaw step.</figcaption>
+    </figure>
+
+    <p>
+      In the final tuned run, the yaw angle tracks the 90° setpoint with a smooth rise and minimal overshoot. The PWM command briefly
+      saturates near the start of the maneuver, then drops to smaller values as the robot approaches the target heading. The integral
+      term removes residual bias due to friction, while the proportional term dominates the transient response.
+    </p>
+
+    <figure class="media-wrap">
+      <video class="media" controls>
+        <source src="../assets/lab6/yaw_run.mp4" type="video/mp4" />
+        Your browser does not support the video tag.
+      </video>
+      <figcaption>Video: Yaw PID run converging to the commanded heading.</figcaption>
+    </figure>
+
+    <h2>5000-Level Requirement — Integrator Wind-Up Protection</h2>
+    <p>
+      Because the yaw maneuver often starts with a large heading error, the controller can easily saturate the motor command. If the
+      integral term were allowed to accumulate error during saturation, it would grow very large and cause overshoot and long
+      settling times once the system leaves saturation. To prevent this, the controller implements an anti-windup scheme that both
+      gates integration and clamps the integral magnitude based on the available PWM range.
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-antiwindup-yaw">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-antiwindup-yaw"><code>// YAW_INTEGRAL_WINDUP_PROTECTION
+bool saturated_high = (u_pwm >= yaw_max_pwm);
+bool saturated_low  = (u_pwm <= -yaw_max_pwm);
+
+bool pushing_high = (u_unclamped >  yaw_max_pwm && error > 0.0f);
+bool pushing_low  = (u_unclamped < -yaw_max_pwm && error < 0.0f);
+
+bool allow_integral = !((saturated_high && pushing_high) ||
+                        (saturated_low  && pushing_low));
+
+if (allow_integral) {
+  yaw_integral = yaw_integral_unclamped;
+  if (yaw_ki > 0.0f) {
+    float i_limit = ((float)yaw_max_pwm) / yaw_ki;
+    if (yaw_integral >  i_limit) yaw_integral =  i_limit;
+    if (yaw_integral < -i_limit) yaw_integral = -i_limit;
+  }
+}</code></pre>
+    </div>
+
+    <p>
+      The telemetry also logs a dedicated windup term, which helps visualize when the anti-windup logic is active. In the plots, this
+      term spikes when the controller hits its PWM limits and then quickly decays once the error decreases and the actuator leaves
+      saturation, confirming that the anti-windup scheme is working as intended.
+    </p>
+
+    <footer class="footer">
+      <p class="muted">© <span id="year"></span> Coby</p>
+      <p><a class="backlink" href="../collaboration.html">Collaboration Statement</a></p>
+    </footer>
+  </main>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+  <script src="../site.js"></script>
+</body>
+</html>
+
