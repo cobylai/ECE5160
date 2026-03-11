@@ -376,30 +376,6 @@ distanceSensor2.setDistanceModeShort();</code></pre>
       react more quickly to changes in the robot’s motion.
     </p>
 
-    <h2>Controller Performance</h2>
-    <p>
-      The performance of the controller can be visualized by plotting the logged data from a successful run.
-    </p>
-    <p>
-      The first plot shows the robot’s distance from the wall as a function of time. The distance decreases rapidly at the beginning
-      of the run and gradually converges to the setpoint as the controller slows the robot.
-    </p>
-
-    <figure class="media-wrap">
-      <img class="media" src="../assets/lab5/tof_vs_time.png" alt="Distance to wall vs time" />
-      <figcaption>Figure: ToF distance vs time.</figcaption>
-    </figure>
-
-    <p>
-      The second plot shows the motor command produced by the controller. The command starts at a relatively high value and
-      decreases as the robot approaches the wall and the error becomes smaller.
-    </p>
-
-    <figure class="media-wrap">
-      <img class="media" src="../assets/lab5/motor_vs_time.png" alt="Motor command vs time" />
-      <figcaption>Figure: Motor command vs time.</figcaption>
-    </figure>
-
     <h2>Robustness Demonstration</h2>
     <p>
       To demonstrate reliability, the robot was tested under several conditions. In one experiment the robot started far from the
@@ -420,11 +396,8 @@ distanceSensor2.setDistanceModeShort();</code></pre>
     </figure>
 
     <figure class="media-wrap">
-      <video class="media" controls>
-        <source src="../assets/lab5/run_short.mp4" type="video/mp4" />
-        Your browser does not support the video tag.
-      </video>
-      <figcaption>Video: Short-distance start.</figcaption>
+      <img class="media" src="../assets/lab5/5.png" alt="Distance to wall vs time for long run" />
+      <figcaption>Figure: Long-run ToF distance vs time.</figcaption>
     </figure>
 
     <figure class="media-wrap">
