@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lab 7 | Kalman Filtering</title>
+  <meta name="description" content="ECE 5160 Spring 2026 Lab 7: Kalman Filtering." />
+  <link rel="stylesheet" href="../style.css" />
+
+  <style>
+    /* Figures: main.lab rules in ../style.css */
+    /* Code block language label in top-right corner */
+    .codeblock {
+      position: relative;
+      margin: 12px 0;
+      border: 1px solid rgba(35,49,79,.75);
+      border-radius: 16px;
+      background: rgba(15,22,38,.8);
+      overflow: hidden;
+    }
+    .codebadge {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(35,49,79,.9);
+      background: rgba(35,49,79,.25);
+      color: rgba(232,237,247,.95);
+      pointer-events: none;
+    }
+    .codeblock pre {
+      margin: 0;
+      padding: 14px;
+      padding-top: 44px;
+      overflow: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      color: rgba(232,237,247,.95);
+    }
+    .copybtn {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      padding: 8px 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(35,49,79,.9);
+      background: rgba(35,49,79,.25);
+      color: rgba(232,237,247,.95);
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .copybtn:hover {
+      border-color: rgba(122,167,255,.55);
+      background: rgba(122,167,255,.14);
+    }
+  </style>
+</head>
+
+<body>
+  <header class="header">
+    <div class="wrap header__inner">
+      <div class="brand">
+        <div class="brand__logo" aria-hidden="true">🚗</div>
+        <div class="brand__text">
+          <h1>Fast Robots</h1>
+          <p>ECE 5160 Spring 2026</p>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a href="../labs.html">Labs</a>
+        <a href="../about.html">About</a>
+        <a href="../collaboration.html">Collaboration Statement</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap section lab">
+    <a class="backlink" href="../labs.html">← Back to Labs</a>
+
+    <h1>Lab 7: Kalman Filtering</h1>
+    <div class="date">Due: <span class="muted">TBD</span></div>
+
+    <h2>Overview</h2>
+    <p>
+      This lab performs system identification on the open-loop wall approach and uses the identified discrete model to implement and
+      evaluate a Kalman filter in simulation (Jupyter) and onboard (Artemis). The Kalman filter estimates both distance-to-wall and
+      velocity from time-of-flight (ToF) measurements and the signed motor command.
+    </p>
+
+    <h2>System identification</h2>
+    <p>
+      I modeled the open-loop approach to the wall as first-order in velocity, with state
+      <code>x = [distance to wall (mm); velocity (mm/s)]ᵀ</code>. Distance decreases when the car drives toward the wall, so
+      steady-state velocity is negative in my sign convention (<code>v = d(distance)/dt</code>).
+    </p>
+    <p>
+      The experiment used the fully assembled differential-drive robot with a SparkFun Artemis as the main controller, a VL53L1X ToF
+      sensor facing the wall for distance, and the onboard ICM-20948 IMU (present on the stack; not the primary signal for this
+      wall-distance KF, which uses ToF + PWM).
+    </p>
+
+    <figure class="media-wrap">
+      <img class="media" src="../assets/lab7/open_loop_step_response.png" alt="Open-loop step response: TOF distance, speed estimate, and signed PWM vs time" />
+      <figcaption>Figure 1: Lab 7 open-loop step response: TOF distance (mm), finite-difference / fit speed (m/s), and signed PWM vs time (relative time from trim).</figcaption>
+    </figure>
+
+    <p>
+      I logged an open-loop constant-PWM run (Lab 5 style), trimmed the ends (<code>start_cut = 3</code>, <code>end_cut = 35</code>),
+      converted time to seconds, and took a finite-difference speed. I fit an exponential to the speed in
+      <code>FIT_T_RANGE = (0, 3.2)</code>&nbsp;s and read off steady-state speed and a rise time at 80% of <code>v_ss</code>
+      (my notebook uses <code>RISE_FRAC = 0.80</code>, not 90%).
+    </p>
+
+    <figure class="media-wrap">
+      <img class="media" src="../assets/lab7/open_loop_velocity_rise.png" alt="Speed-only view with exponential fit, v_ss, and 80% v_ss lines" />
+      <figcaption>Figure 2 Speed-only view with exponential fit, v_ss, and 80% v_ss lines.</figcaption>
+    </figure>
+
+    <p>
+      From the exponential fit I obtained <code>v_ss ≈ −2538.06 mm/s</code> and <code>t_rise ≈ 2.7614 s</code> at 80% of
+      <code>v_ss</code>. Treating the step input as normalized <code>u = 1</code> at <code>STEP_PWM = max_pwm = 100</code>, the
+      notebook identifies a positive drag-style scalar <code>d = 1 / |v_ss| ≈ 0.000394 s/mm</code> and a momentum parameter
+      <code>m</code> from
+      <code>m = −d · t_rise / ln(1 − RISE_FRAC)</code>, which yields the <code>−d/m ≈ −0.5828 1/s</code> entry I used in the
+      A matrix (matching the discrete Ad diagonal I use at <code>dt = 0.01 s</code>).
+    </p>
+    <p>
+      The identification run used <code>STEP_PWM = 100</code>, which is in the same signed PWM units as the Lab 5 wall runs and is a
+      “similar magnitude” step (large enough to show a clear first-order rise in speed without saturating the entire drive range).
+    </p>
+
+    <p>
+      For the wall approach model with positive PWM pulling distance down, I use a negative input column in B (mm/s² per PWM). That
+      matches both the Jupyter discrete Bd and the firmware.
+    </p>
+
+    <p>Code (step-response / identification setup) (from my notebook):</p>
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="py-id-setup">Copy</button>
+      <span class="codebadge">Python</span>
+      <pre id="py-id-setup"><code># step response trimming + fit settings
+start_cut = 3
+end_cut = 35
+
+FIT_T_RANGE = (0, 3.2)
+RISE_FRAC = 0.80
+
+# ... compute v_ss, t_rise from the fit ...
+d = 1.0 / abs(v_ss)
+v_rise = v_ss * RISE_FRAC
+
+# momentum-ish parameter from rise time
+m = -d * t_rise / np.log(1.0 - RISE_FRAC)</code></pre>
+    </div>
+
+    <p>Discrete model used later (Jupyter KF + Artemis), same notebook / hand calculations:</p>
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="py-discrete-model">Copy</button>
+      <span class="codebadge">Python</span>
+      <pre id="py-discrete-model"><code># discrete model used in both Jupyter + firmware
+dt = 0.01
+
+Ad = [
+    [1.0, dt],
+    [0.0, 0.994172],
+]
+Bd = [
+    [0.0],
+    [-0.147926],
+]
+
+# measures distance (TOF)
+C = [[1, 0]]</code></pre>
+    </div>
+    <p>
+      Here <code>C = [[1, 0]]</code> picks the first state (distance), because that is what the ToF measures. The handout’s
+      <code>[[−1, 0]]</code> example corresponds to a different position sign convention; in this report, a larger ToF reading means
+      the robot is farther from the wall, so the measurement is <code>y = (1)·distance + noise</code>.
+    </p>
+    <p>
+      For Jupyter, the handout’s discrete model uses a fixed discretization period <code>dt = 0.01 s</code> (100&nbsp;Hz), which is
+      the sampling time embedded in the <code>Ad</code> and <code>Bd</code> values above.
+    </p>
+
+    <h2>Kalman filter simulation (Jupyter)</h2>
+    <p>
+      I pulled time, raw ToF, and signed PWM from a straight wall run (<code>wall_t_ms</code>, <code>wall_dist_mm</code> /
+      <code>wall_raw_mm</code>, <code>wall_pwm</code>). To match the lab handout, I linearly interpolated ToF and PWM onto a common
+      10&nbsp;ms grid and called a lecture-style <code>kf(mu, sigma, u, y)</code> each step, with
+      <code>u = pwm / STEP_PWM_REF</code> and <code>B_unit = Bd * step_size</code> so the discrete input matches
+      <code>Bd × (actual PWM)</code>.
+    </p>
+    <p>
+      ToF and PWM do not share the same native timestamps or count per second, so interpolation onto a single time vector ensures
+      every index <code>k</code> has a paired <code>(u_k, y_k)</code> for the KF loop (equal-length requirement).
+    </p>
+    <p>
+      The handout’s input scaling is implemented as <code>u = pwm_actual / STEP_PWM_REF</code> with
+      <code>B_unit = Bd × step_size</code>, so <code>B_unit·u</code> equals <code>Bd·pwm</code> (a unit step in identification maps
+      cleanly to the real PWM command used on the robot).
+    </p>
+
+    <p>Process and measurement covariances:</p>
+    <p>
+      <code>Σu = diag(σ₁², σ₂²)</code> with <code>σ₁ = 1 mm</code>, <code>σ₂ = 100 mm/s</code><br />
+      <code>Σz = [[σ₃²]]</code> with <code>σ₃ = 50 mm</code> for my baseline run
+    </p>
+
+    <figure class="media-wrap">
+      <img class="media" src="../assets/lab7/kf_simulation_results.png" alt="Jupyter Kalman filter simulation results" />
+      <figcaption>Figure 3: Jupyter KF on interpolated grid: raw + interpolated ToF vs KF distance; raw / interp finite-difference velocity vs KF velocity; interpolated PWM vs logged samples.</figcaption>
+    </figure>
+
+    <p>Code (kf + covariances) (from my notebook):</p>
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="py-kf-code">Copy</button>
+      <span class="codebadge">Python</span>
+      <pre id="py-kf-code"><code>import numpy as np
+
+# noise tuning
+sigma_1 = 1.0
+sigma_2 = 100.0
+sigma_3 = 50.0
+
+Sigma_u = np.diag([sigma_1**2, sigma_2**2])
+Sigma_z = np.array([[sigma_3**2]])
+
+def kf(mu, sigma, u, y, Ad, B_unit, C, Sigma_u, Sigma_z):
+    # keep shapes consistent (2x1 state, 2x2 covariance)
+    mu = np.asarray(mu, dtype=float).reshape(2, 1)
+    sigma = np.asarray(sigma, dtype=float).reshape(2, 2)
+    u_m = np.array([[float(u)]])
+
+    # predict
+    mu_p = Ad @ mu + B_unit @ u_m
+    sigma_p = Ad @ sigma @ Ad.T + Sigma_u
+
+    # update (distance measurement)
+    sigma_m = C @ sigma_p @ C.T + Sigma_z
+    kkf_gain = sigma_p @ C.T @ np.linalg.inv(sigma_m)
+    y_m = np.array([[float(y)]]) - C @ mu_p
+
+    mu = mu_p + kkf_gain @ y_m
+    sigma = (np.eye(2) - kkf_gain @ C) @ sigma_p
+    return mu, sigma</code></pre>
+    </div>
+    <p>
+      State initialization uses <code>μ₀ = [distance_mm, velocity_mm/s]ᵀ</code>. In practice, the first valid ToF measurement sets
+      <code>distance = ToF[0]</code>, velocity is initialized to 0, and <code>Σ₀</code> is chosen with high initial uncertainty
+      consistent with the chosen <code>Σz</code> on distance and <code>σ₂²</code> on velocity.
+    </p>
+
+    <p>
+      I then swept <code>σ₃ ∈ {1, 50, 100}</code>&nbsp;mm with <code>Σu</code> fixed. Smaller <code>σ₃</code> tracks interpolated
+      ToF more tightly; larger <code>σ₃</code> smooths more. That matches intuition: <code>Σz</code> is how much I trust the sensor
+      vs the model prediction.
+    </p>
+    <h3>Parameters affecting the filter</h3>
+    <p>
+      Kalman filter performance depends on the identified dynamics (<code>Ad</code>, <code>Bd</code>), sampling time
+      (<code>dt</code> in Jupyter vs <code>dt_s</code> onboard), initialization (<code>μ₀</code>, <code>Σ₀</code>), process noise
+      (<code>Σu</code> via <code>σ₁</code>, <code>σ₂</code>), measurement noise (<code>Σz</code> via <code>σ₃</code>), interpolation
+      assumptions, sign / measurement mapping (<code>C</code>), trim windows, and the relationship between the MCU poll rate and the
+      ToF update rate (how often prediction runs without a measurement update).
+    </p>
+
+    <figure class="media-wrap">
+      <img class="media" src="../assets/lab7/kf_sigma3_sweep.png" alt="Sigma_3 sweep Kalman filter results" />
+      <figcaption>Figure 4: Overlay of KF distance and velocity for σ₃ = 1, 50, 100 mm with fixed Σu.</figcaption>
+    </figure>
+
+    <h2>Onboard Kalman filter (Artemis)</h2>
+    <p>
+      I removed the linear ToF extrapolation and fused raw ToF in a Kalman filter every time a new range is ready, while predicting
+      every PID loop iteration using variable <code>dt_s</code> from <code>millis()</code> (clamped if needed). The PID error uses
+      the KF distance <code>wall_kf_mu(0,0)</code>, not the raw reading.
+    </p>
+    <p>
+      This wall-distance Kalman filter gives a smoother, less noisy estimate of range than raw ToF, so the PID sees a stable
+      “distance to wall” while still updating on real measurements. That reduces chatter and false corrections near the stop band,
+      which is important for reliably stopping without overshooting due to spike range readings. 
+    </p>
+
+    <figure class="media-wrap">
+      <img class="media" src="../assets/lab7/onboard_kf_pid.png" alt="Onboard KF + PID plot: raw ToF vs KF distance and residual" />
+      <figcaption>Figure 5: Onboard run: raw ToF vs KF distance.</figcaption>
+    </figure>
+
+    <figure class="media-wrap">
+      <video class="media" controls>
+        <source src="../assets/lab7/kf_demo_video.mp4" type="video/mp4" />
+        Your browser does not support the video tag.
+      </video>
+      <figcaption>Video: kf_demo_video.mp4.</figcaption>
+    </figure>
+
+    <p>
+      Following the lab instructions, I validated the onboard KF with debugging plots (raw vs KF distance and residual) and a short
+      demo video before trying to speed up the approach. Linear ToF extrapolation was removed first so the Kalman filter, not the
+      extrapolator, defines the distance estimate used by the PID.
+    </p>
+
+    <p>Code (Kalman predict + update pattern) (from my firmware):</p>
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-onboard-kf">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-onboard-kf"><code>#include &lt;BasicLinearAlgebra.h&gt;
+using namespace BLA;
+
+// process noise (picked to keep velocity from blowing up)
+static const Matrix&lt;2, 2&gt; WALL_KF_SIGMA_U = {
+  1.0f,    0.0f,
+  0.0f, 10000.0f
+};
+
+// ... dt_s computed from millis(), clamped if needed ...
+Matrix&lt;2, 2&gt; Ad = { 1.0f, dt_s,
+                   0.0f, 1.0f - 0.5828f * dt_s };
+Matrix&lt;2, 1&gt; Bd = { 0.0f,
+                   -14.7926f * dt_s };
+
+Matrix&lt;2, 1&gt; mu_p = Ad * wall_kf_mu;
+mu_p(1, 0) += Bd(1, 0) * (float)wall_last_pwm;
+
+Matrix&lt;2, 2&gt; Sigma_p = Ad * wall_kf_Sigma * ~Ad + WALL_KF_SIGMA_U;</code></pre>
+    </div>
+
+    <p>
+      Measurement update uses <code>C = [1, 0]</code>, <code>σ_z = 2500</code> (i.e. 50&nbsp;mm std) on distance, and Joseph-style
+      <code>(I − K C) Σ_p</code> via <code>Kmat * Cmat</code>. The BLE log is
+      <code>WALL:&lt;ms&gt;,&lt;raw&gt;,&lt;kf&gt;,&lt;err&gt;,&lt;pwm&gt;</code> so Jupyter can plot raw vs KF on the same axes.
+    </p>
+    <p>
+      On the Artemis, <code>Ad</code>/<code>Bd</code> are recomputed using the measured loop interval <code>dt_s</code>, which is the
+      embedded discretization of the same continuous model (as opposed to Jupyter’s fixed <code>dt = 0.01 s</code>).
+    </p>
+
+    <p>PID on KF distance:</p>
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-pid-on-kf">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-pid-on-kf"><code>error = dist_est - (float)setpoint_mm;</code></pre>
+    </div>
+
+    <footer class="footer">
+      <p class="muted">© <span id="year"></span> Coby</p>
+      <p><a class="backlink" href="../collaboration.html">Collaboration Statement</a></p>
+    </footer>
+  </main>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+  <script src="../site.js"></script>
+</body>
+</html>

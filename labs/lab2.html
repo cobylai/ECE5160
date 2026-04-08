@@ -8,27 +8,7 @@
   <link rel="stylesheet" href="../style.css" />
 
   <style>
-    /* Media must be max 1/4 window width */
-    .media-wrap { margin: 12px 0; }
-    figure.media-wrap { margin: 12px 0; }
-    .media {
-      display: block;
-      width: 100%;
-      max-width: 25vw;
-      border-radius: 12px;
-      border: 1px solid rgba(35,49,79,.7);
-      background: #000;
-    }
-    .media.portrait {
-      max-height: 25vw;
-      object-fit: contain;
-    }
-    figcaption {
-      margin-top: 8px;
-      font-size: 13px;
-      color: rgba(232,237,247,.78);
-    }
-
+    /* Figures: main.lab rules in ../style.css */
     /* Code block language label in top-right corner */
     .codeblock {
       position: relative;
@@ -75,12 +55,6 @@
     .copybtn:hover {
       border-color: rgba(122,167,255,.55);
       background: rgba(122,167,255,.14);
-    }
-
-    /* Make sure the page still works on small screens */
-    @media (max-width: 700px) {
-      .media { max-width: 100%; }
-      .media.portrait { max-height: none; }
     }
   </style>
 </head>
