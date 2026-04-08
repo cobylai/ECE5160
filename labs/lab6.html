@@ -8,27 +8,7 @@
   <link rel="stylesheet" href="../style.css" />
 
   <style>
-    /* Media must be max 1/4 window width */
-    .media-wrap { margin: 12px 0; }
-    figure.media-wrap { margin: 12px 0; }
-    .media {
-      display: block;
-      width: 100%;
-      max-width: 25vw;
-      border-radius: 12px;
-      border: 1px solid rgba(35,49,79,.7);
-      background: #000;
-    }
-    .media.portrait {
-      max-height: 25vw;
-      object-fit: contain;
-    }
-    figcaption {
-      margin-top: 8px;
-      font-size: 13px;
-      color: rgba(232,237,247,.78);
-    }
-
+    /* Figures: main.lab rules in ../style.css */
     /* Code block language label in top-right corner */
     .codeblock {
       position: relative;
@@ -75,12 +55,6 @@
     .copybtn:hover {
       border-color: rgba(122,167,255,.55);
       background: rgba(122,167,255,.14);
-    }
-
-    /* Make sure the page still works on small screens */
-    @media (max-width: 700px) {
-      .media { max-width: 100%; }
-      .media.portrait { max-height: none; }
     }
   </style>
 </head>
@@ -129,7 +103,7 @@
       </a>.
     </p>
 
-    <h2>Prelab — Bluetooth Communication</h2>
+    <h2>Prelab: Bluetooth Communication</h2>
     <p>
       The yaw PID experiment is controlled over BLE using string characteristics. On the Artemis, a BLE service exposes a receive
       characteristic for commands and a transmit characteristic for telemetry. In <code>ble_arduino.ino</code>, the
@@ -326,7 +300,7 @@ delay((unsigned long)yaw_loop_period_ms);</code></pre>
       the desired period to understand timing jitter and its impact on controller performance.
     </p>
 
-    <h2>Experimental Results — Yaw vs Time</h2>
+    <h2>Experimental Results: Yaw vs Time</h2>
     <p>
       The BLE telemetry includes the yaw angle, P/I/D terms, total control effort, and signed motor PWM command at each controller
       iteration. In the combined plot below, the top panel shows <code>θ(t)</code> with the setpoint overlay, the middle panel shows the
@@ -353,7 +327,7 @@ delay((unsigned long)yaw_loop_period_ms);</code></pre>
       <figcaption>Video: Yaw PID run converging to the commanded heading.</figcaption>
     </figure>
 
-    <h2>5000-Level Requirement — Integrator Wind-Up Protection</h2>
+    <h2>5000-Level Requirement: Integrator Wind-Up Protection</h2>
     <p>
       Because the yaw maneuver often starts with a large heading error, the controller can easily saturate the motor command. If the
       integral term were allowed to accumulate error during saturation, it would grow very large and cause overshoot and long

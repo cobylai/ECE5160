@@ -8,27 +8,7 @@
   <link rel="stylesheet" href="../style.css" />
 
   <style>
-    /* Media must be max 1/4 window width */
-    .media-wrap { margin: 12px 0; }
-    figure.media-wrap { margin: 12px 0; }
-    .media {
-      display: block;
-      width: 100%;
-      max-width: 25vw;
-      border-radius: 12px;
-      border: 1px solid rgba(35,49,79,.7);
-      background: #000;
-    }
-    .media.portrait {
-      max-height: 25vw;
-      object-fit: contain;
-    }
-    figcaption {
-      margin-top: 8px;
-      font-size: 13px;
-      color: rgba(232,237,247,.78);
-    }
-
+    /* Figures: main.lab rules in ../style.css */
     /* Code block language label in top-right corner */
     .codeblock {
       position: relative;
@@ -76,12 +56,6 @@
       border-color: rgba(122,167,255,.55);
       background: rgba(122,167,255,.14);
     }
-
-    /* Make sure the page still works on small screens */
-    @media (max-width: 700px) {
-      .media { max-width: 100%; }
-      .media.portrait { max-height: none; }
-    }
   </style>
 </head>
 
@@ -125,7 +99,7 @@
       </a>.
     </p>
 
-    <h2>Prelab — Bluetooth Communication</h2>
+    <h2>Prelab: Bluetooth Communication</h2>
     <p>
       The robot control system was designed so that all experiments could be triggered and logged remotely over Bluetooth. A Python
       script running on the computer connects to the Artemis board using BLE and sends a command that starts the wall approach
@@ -321,7 +295,7 @@ if (u_pwm != 0 &amp;&amp; abs_error &gt; deadband) {
 
     <figure class="media-wrap">
       <img class="media" src="../assets/lab5/1.png" alt="Low proportional gain: slow approach, poor error reduction" />
-      <figcaption>Figure: Low Kp — slow approach.</figcaption>
+      <figcaption>Figure: Low Kp, slow approach.</figcaption>
     </figure>
 
     <p>
@@ -330,7 +304,7 @@ if (u_pwm != 0 &amp;&amp; abs_error &gt; deadband) {
 
     <figure class="media-wrap">
       <img class="media" src="../assets/lab5/2.png" alt="High proportional gain: oscillations near setpoint" />
-      <figcaption>Figure: High Kp — oscillations.</figcaption>
+      <figcaption>Figure: High Kp, oscillations.</figcaption>
     </figure>
 
     <p>
@@ -340,7 +314,7 @@ if (u_pwm != 0 &amp;&amp; abs_error &gt; deadband) {
 
     <figure class="media-wrap">
       <img class="media" src="../assets/lab5/3.png" alt="Low derivative gain: underdamped oscillation" />
-      <figcaption>Figure: Low Kd — underdamped oscillation.</figcaption>
+      <figcaption>Figure: Low Kd, underdamped oscillation.</figcaption>
     </figure>
 
     <p>
@@ -349,7 +323,7 @@ if (u_pwm != 0 &amp;&amp; abs_error &gt; deadband) {
 
     <figure class="media-wrap">
       <img class="media" src="../assets/lab5/4.png" alt="Tuned PID: fast approach and smooth settling" />
-      <figcaption>Figure: Tuned gains — fast approach, smooth settling.</figcaption>
+      <figcaption>Figure: Tuned gains, fast approach, smooth settling.</figcaption>
     </figure>
 
     <h2>Range and Sampling Time</h2>
@@ -413,7 +387,7 @@ distanceSensor2.setDistanceModeShort();</code></pre>
       <figcaption>Figure: Perturbation test distance to wall.</figcaption>
     </figure>
 
-    <h2>5000-Level Requirement — Integrator Wind-Up Protection</h2>
+    <h2>5000-Level Requirement: Integrator Wind-Up Protection</h2>
     <p>
       Integrator wind-up occurs when the integral term continues accumulating error while the actuator output is saturated. Because
       the motor command cannot exceed its maximum value, the integrator may grow very large and cause excessive overshoot once the

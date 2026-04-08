@@ -8,35 +8,7 @@
   <link rel="stylesheet" href="../style.css" />
 
   <style>
-    .media-wrap { margin: 12px 0; }
-    figure.media-wrap { margin: 12px 0; }
-    .media {
-      display: block;
-      width: 100%;
-      max-width: 25vw;
-      border-radius: 12px;
-      border: 1px solid rgba(35,49,79,.7);
-      background: #000;
-    }
-    .media.portrait {
-      max-height: 25vw;
-      object-fit: contain;
-    }
-    figcaption {
-      margin-top: 8px;
-      font-size: 13px;
-      color: rgba(232,237,247,.78);
-    }
-
-    .media-row {
-      display: flex;
-      gap: 14px;
-      align-items: flex-start;
-      flex-wrap: wrap;
-      margin: 12px 0;
-    }
-    .media-row figure { margin: 0; }
-
+    /* Figures + .media-row: main.lab rules in ../style.css */
     .codeblock {
       position: relative;
       margin: 12px 0;
@@ -83,12 +55,6 @@
     .copybtn:hover {
       border-color: rgba(122,167,255,.55);
       background: rgba(122,167,255,.14);
-    }
-
-    @media (max-width: 700px) {
-      .media { max-width: 100%; }
-      .media.portrait { max-height: none; }
-      .media-row { gap: 10px; }
     }
   </style>
 </head>

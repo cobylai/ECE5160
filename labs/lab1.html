@@ -7,26 +7,8 @@
   <meta name="description" content="ECE 5160 Spring 2026 Lab 1" />
   <link rel="stylesheet" href="../style.css" />
 
-  <!-- Lab-specific styling (media sizing + code type badges) -->
+  <!-- Lab-specific: code blocks (figures use main.lab styles in ../style.css) -->
   <style>
-    /* Media must be max 1/4 window width */
-    .media-wrap {
-      margin: 12px 0;
-    }
-    .media {
-      display: block;
-      width: 100%;
-      max-width: 25vw;
-      border-radius: 12px;
-      border: 1px solid rgba(35,49,79,.7);
-      background: #000;
-    }
-    /* For portrait media: cap height at 1/4 window width */
-    .media.portrait {
-      max-height: 25vw;
-      object-fit: contain;
-    }
-
     /* Code block language label in top-right corner */
     .codeblock {
       position: relative;
@@ -73,12 +55,6 @@
     .copybtn:hover {
       border-color: rgba(122,167,255,.55);
       background: rgba(122,167,255,.14);
-    }
-
-    /* Make sure the page still works on small screens */
-    @media (max-width: 700px) {
-      .media { max-width: 100%; }
-      .media.portrait { max-height: none; }
     }
   </style>
 </head>
