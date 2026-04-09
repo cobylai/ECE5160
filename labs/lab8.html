@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lab 8 | Stunts!</title>
+  <meta name="description" content="ECE 5160 Spring 2026 Lab 8: BLE-triggered flip maneuver with predictive ToF sensing." />
+  <link rel="stylesheet" href="../style.css" />
+
+  <style>
+    .codeblock {
+      position: relative;
+      margin: 12px 0;
+      border: 1px solid rgba(35,49,79,.75);
+      border-radius: 16px;
+      background: rgba(15,22,38,.8);
+      overflow: hidden;
+    }
+    .codebadge {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(35,49,79,.9);
+      background: rgba(35,49,79,.25);
+      color: rgba(232,237,247,.95);
+      pointer-events: none;
+    }
+    .codeblock pre {
+      margin: 0;
+      padding: 14px;
+      padding-top: 44px;
+      overflow: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      color: rgba(232,237,247,.95);
+    }
+    .copybtn {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      padding: 8px 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(35,49,79,.9);
+      background: rgba(35,49,79,.25);
+      color: rgba(232,237,247,.95);
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .copybtn:hover {
+      border-color: rgba(122,167,255,.55);
+      background: rgba(122,167,255,.14);
+    }
+  </style>
+</head>
+
+<body>
+  <header class="header">
+    <div class="wrap header__inner">
+      <div class="brand">
+        <div class="brand__logo" aria-hidden="true">🚗</div>
+        <div class="brand__text">
+          <h1>Fast Robots</h1>
+          <p>ECE 5160 Spring 2026</p>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a href="../labs.html">Labs</a>
+        <a href="../about.html">About</a>
+        <a href="../collaboration.html">Collaboration Statement</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap section lab">
+    <a class="backlink" href="../labs.html">← Back to Labs</a>
+
+    <h1>Lab 8: Stunts!</h1>
+    <!-- <div class="date">Due: <span class="muted">TBD</span></div> -->
+
+    <h2>Overview</h2>
+    <p>
+      This lab implements a BLE-triggered flip maneuver using ToF sensing. The robot drives toward a wall, predicts
+      distance using linear extrapolation, triggers a direction reversal before the raw reading reaches the setpoint,
+      and logs all data onboard for post-run visualization. Logged signals include raw distance, predicted distance,
+      PWM, and phase.
+    </p>
+    <!-- <p>
+      If any media isn&apos;t working, you can view it using this link:
+      <a href="https://github.com/cobylai/ECE5160/tree/main/assets/lab8" target="_blank" rel="noopener noreferrer">
+        https://github.com/cobylai/ECE5160/tree/main/assets/lab8
+      </a>.
+    </p> -->
+
+    <h2>Notebook Run</h2>
+    <p>
+      The notebook handles three steps: send parameters, execute the flip, then fetch logged data. Parameters are
+      packed into a pipe-delimited string matching the seven-field <code>FLIP_START</code> payload: approach PWM,
+      reverse PWM, pause time, control period (ms), flip distance (mm), max approach time (ms), and reverse
+      duration (ms).
+    </p>
+
+    <p>Payload formatting:</p>
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="py-payload">Copy</button>
+      <span class="codebadge">Python</span>
+      <pre id="py-payload"><code>def build_flip_payload(
+    approach_pwm,
+    reverse_pwm,
+    pause_time,
+    poll_time_ms,
+    flip_dist_mm,
+    approach_max_ms,
+    reverse_ms,
+):
+    return f"{approach_pwm}|{reverse_pwm}|{pause_time}|{poll_time_ms}|{flip_dist_mm}|{approach_max_ms}|{reverse_ms}"</code></pre>
+    </div>
+
+    <p>
+      After the maneuver completes, the notebook requests logged data via <code>FLIP_GET_DATA</code>. The
+      notification handler parses each <code>FLIP:...</code> line into arrays for time, raw distance, phase,
+      PWM, and predicted distance.
+    </p>
+
+    <p>Notification handler:</p>
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="py-handler">Copy</button>
+      <span class="codebadge">Python</span>
+      <pre id="py-handler"><code>def flip_handler(uuid, byte_array):
+    raw = ble.bytearray_to_string(byte_array).strip()
+    if not raw.startswith("FLIP:"):
+        return
+    try:
+        parts = raw[5:].split(",")
+        if len(parts) >= 4:
+            time_ms.append(int(parts[0].strip()))
+            raw_mm.append(int(parts[1].strip()))
+            phase.append(int(parts[2].strip()))
+            pwm.append(int(parts[3].strip()))
+            if len(parts) >= 5:
+                pred_mm.append(int(parts[4].strip()))
+            else:
+                pred_mm.append(int(parts[1].strip()))
+    except (ValueError, IndexError) as e:
+        print("FLIP parse error:", raw[:80], e)</code></pre>
+    </div>
+
+    <h2>Firmware Behavior</h2>
+    <p>
+      The <code>FLIP_START</code> command in <code>ble_arduino.ino</code> reads the payload values and initializes
+      ToF in long-range mode. The maneuver runs in two phases:
+    </p>
+
+    <h3>1. Approach</h3>
+    <p>
+      Motors drive forward at <code>approach_pwm</code>. ToF is polled continuously and the prediction model
+      updates on each valid reading. The phase exits when predicted distance drops to <code>flip_dist_mm</code>,
+      or when the approach timer expires. Data is logged every loop iteration.
+    </p>
+
+    <h3>2. Reverse</h3>
+    <p>
+      Triggered only if the prediction condition is met. The motor direction pins are flipped and PWM is set to
+      <code>reverse_pwm</code>. Logging continues with negative PWM values.
+    </p>
+
+    <p>FLIP_START command handler:</p>
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-flip-start">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-flip-start"><code>case FLIP_START: {
+  int approach_pwm    = 130;
+  int reverse_pwm     = 130;
+  int pause_time      = 100;
+  int poll_time_ms    = 10;
+  int flip_dist_mm    = 320;
+  int approach_max_ms = 5000;
+  int reverse_ms      = 2000;
+
+  if (!robot_cmd.get_next_value(approach_pwm))    break;
+  if (!robot_cmd.get_next_value(reverse_pwm))     break;
+  if (!robot_cmd.get_next_value(pause_time))      break;
+  if (!robot_cmd.get_next_value(poll_time_ms))     break;
+  if (!robot_cmd.get_next_value(flip_dist_mm))     break;
+  if (!robot_cmd.get_next_value(approach_max_ms))  break;
+  if (!robot_cmd.get_next_value(reverse_ms))       break;
+
+  SFEVL53L1X *tof = use_sensor2 ? &amp;distanceSensor2 : &amp;distanceSensor1;
+  tof-&gt;setDistanceModeLong();
+  tof-&gt;startRanging();
+
+  // Approach: reverse pins low, forward pins at approach PWM
+  analogWrite(L_REVERSE, 0);
+  analogWrite(R_REVERSE, 0);
+  analogWrite(L_PWM, approach_pwm);
+  analogWrite(R_PWM, approach_pwm);
+
+  bool triggered = false;
+  unsigned long t0 = millis();
+
+  while ((millis() - t0) &lt; (unsigned long)approach_max_ms) {
+    BLE.poll();
+    unsigned long now = millis();
+
+    if (tof-&gt;checkForDataReady()) {
+      int raw = tof-&gt;getDistance();
+      update_anchor(raw, now, last_raw, has_anchor,
+                    anchor_dist, anchor_time, velocity);
+    }
+
+    if (has_anchor) {
+      float pred = predict_distance(now, last_raw, has_anchor,
+                                    anchor_dist, anchor_time, velocity);
+      if (pred &lt;= (float)flip_dist_mm) {
+        triggered = true;
+        break;
+      }
+    }
+
+    // log: time, raw mm, phase, signed pwm, predicted mm
+    delay((unsigned long)poll_time_ms);
+  }
+  // ... reverse phase follows if triggered ...
+}</code></pre>
+    </div>
+
+    <h3>FLIP_GET_DATA</h3>
+    <p>
+      Each stored sample is streamed back over BLE as a single string per line:
+    </p>
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-get-data">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-get-data"><code>case FLIP_GET_DATA: {
+  for (int i = 0; i &lt; log_count; i++) {
+    tx_estring_value.clear();
+    tx_estring_value.append("FLIP:");
+    tx_estring_value.append(log_time[i]);
+    tx_estring_value.append(",");
+    tx_estring_value.append(log_raw[i]);
+    tx_estring_value.append(",");
+    tx_estring_value.append(log_phase[i]);
+    tx_estring_value.append(",");
+    tx_estring_value.append(log_pwm[i]);
+    tx_estring_value.append(",");
+    tx_estring_value.append(log_pred[i]);
+    tx_characteristic_string.writeValue(tx_estring_value.c_str());
+    delay(10);
+  }
+  break;
+}</code></pre>
+    </div>
+
+    <h2>Linear Extrapolation Model</h2>
+    <p>
+      Rather than reacting only to raw ToF updates, the controller predicts distance between sensor readings.
+      Velocity is computed only when the measured distance actually changes. Repeated identical ToF values are
+      ignored and only genuinely new readings update velocity. The anchor stores the last valid (distance, time)
+      pair. If no anchor exists yet, prediction falls back to the raw reading.
+    </p>
+    <p>
+      This matters because the control loop runs much faster than the ToF update rate. Without prediction, the
+      robot would only know it crossed the setpoint after the next sensor reading arrives, by which time it may
+      already be too close. With extrapolation, the controller anticipates the crossing and triggers the reversal
+      earlier.
+    </p>
+
+    <p>Distinct-anchor velocity update:</p>
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-anchor">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-anchor"><code>static void update_anchor(int raw_mm, unsigned long now_ms,
+                          int &amp;last_raw, bool &amp;has_anchor,
+                          int &amp;anchor_dist, unsigned long &amp;anchor_time,
+                          float &amp;velocity) {
+  last_raw = raw_mm;
+
+  if (!has_anchor) {
+    anchor_dist = raw_mm;
+    anchor_time = now_ms;
+    has_anchor  = true;
+    velocity    = 0.0f;
+    return;
+  }
+
+  // ignore repeated identical readings
+  if (raw_mm == anchor_dist) return;
+
+  int prev_dist          = anchor_dist;
+  unsigned long prev_time = anchor_time;
+  anchor_dist = raw_mm;
+  anchor_time = now_ms;
+
+  unsigned long dt = anchor_time - prev_time;
+  if (dt &gt; 0) {
+    velocity = ((float)(anchor_dist - prev_dist)) / (float)dt;
+  }
+}</code></pre>
+    </div>
+
+    <p>Predicted distance from the current anchor:</p>
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-predict">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-predict"><code>// d̂(t) = anchor_dist + velocity * (t - anchor_time)
+static float predict_distance(unsigned long now_ms, int last_raw,
+                              bool has_anchor, int anchor_dist,
+                              unsigned long anchor_time, float velocity) {
+  if (!has_anchor) return (float)last_raw;
+  float elapsed = (float)(now_ms - anchor_time);
+  return (float)anchor_dist + velocity * elapsed;
+}</code></pre>
+    </div>
+
+    <h2>Results</h2>
+    <p>
+      Logged data is converted to seconds and plotted in two subplots. Raw ToF shows step-like behavior due to
+      the sensor update rate, while predicted distance is smooth and continuous. The setpoint is shown as a
+      horizontal reference. Prediction typically crosses the setpoint before the raw data does, confirming that
+      the reversal fires earlier than it would with raw-only sensing. Positive PWM corresponds to forward
+      motion, negative to reverse, with a clear transition at the prediction trigger point.
+    </p>
+
+    <figure class="media-wrap">
+      <img class="media" src="../assets/lab8/graph1.png" alt="Distance and PWM vs time for flip run 1" />
+      <figcaption>Figure 1: Raw ToF, predicted distance, setpoint, and signed PWM vs time (run 1).</figcaption>
+    </figure>
+
+    <figure class="media-wrap">
+      <img class="media" src="../assets/lab8/graph2.png" alt="Distance and PWM vs time for flip run 2" />
+      <figcaption>Figure 2: Raw ToF, predicted distance, setpoint, and signed PWM vs time (run 2).</figcaption>
+    </figure>
+
+    <h2>Demonstration</h2>
+
+    <div class="media-row">
+      <figure class="media-wrap">
+        <video class="media" style="max-width:25vw" controls>
+          <source src="../assets/lab8/flip1.mp4" type="video/mp4" />
+          Your browser does not support the video tag.
+        </video>
+        <figcaption>Video 1: Flip maneuver run 1.</figcaption>
+      </figure>
+
+      <figure class="media-wrap">
+        <video class="media" style="max-width:25vw" controls>
+          <source src="../assets/lab8/flip2.mp4" type="video/mp4" />
+          Your browser does not support the video tag.
+        </video>
+        <figcaption>Video 2: Flip maneuver run 2.</figcaption>
+      </figure>
+    </div>
+
+    <h2>Discussion</h2>
+    <p>
+      Unfortunately, the left motor gearbox jammed after these two demonstrations, preventing further testing. As a result, I was unable to capture additional runs with a straighter trajectory.
+    </p>
+    <p>
+      The flip is triggered using predicted distance rather than raw ToF. This reduces the delay caused by sensor
+      sampling and improves timing of the reversal. The distinct-anchor method prevents velocity from being
+      corrupted by repeated identical ToF readings, keeping the prediction stable and avoiding zero-velocity
+      artifacts.
+    </p>
+    <p>
+      The result is a clean transition from approach to reverse before the robot reaches the wall, demonstrating
+      effective feedforward-style behavior with a simple linear model. The approach is lightweight, runs entirely
+      onboard, and integrates cleanly with the existing BLE logging pipeline.
+    </p>
+
+    <p>
+      <a href="../collaboration.html">Collaboration Statement</a>
+    </p>
+
+    <footer class="footer">
+      <p class="muted">© <span id="year"></span> Coby</p>
+      <p><a class="backlink" href="../collaboration.html">Collaboration Statement</a></p>
+    </footer>
+  </main>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+  <script src="../site.js"></script>
+</body>
+</html>
