@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lab 9 | Mapping</title>
+  <meta name="description" content="ECE 5160 Spring 2026 Lab 9: Room mapping via on-axis ToF scanning and point cloud transformation." />
+  <link rel="stylesheet" href="../style.css" />
+
+  <style>
+    .codeblock {
+      position: relative;
+      margin: 12px 0;
+      border: 1px solid rgba(35,49,79,.75);
+      border-radius: 16px;
+      background: rgba(15,22,38,.8);
+      overflow: hidden;
+    }
+    .codebadge {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(35,49,79,.9);
+      background: rgba(35,49,79,.25);
+      color: rgba(232,237,247,.95);
+      pointer-events: none;
+    }
+    .codeblock pre {
+      margin: 0;
+      padding: 14px;
+      padding-top: 44px;
+      overflow: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      color: rgba(232,237,247,.95);
+    }
+    .copybtn {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      padding: 8px 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(35,49,79,.9);
+      background: rgba(35,49,79,.25);
+      color: rgba(232,237,247,.95);
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .copybtn:hover {
+      border-color: rgba(122,167,255,.55);
+      background: rgba(122,167,255,.14);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 14px;
+    }
+    th, td {
+      padding: 10px 14px;
+      text-align: left;
+      border-bottom: 1px solid rgba(35,49,79,.5);
+    }
+    th {
+      color: rgba(232,237,247,.7);
+      font-weight: 600;
+      background: rgba(15,22,38,.5);
+    }
+    td {
+      color: rgba(232,237,247,.9);
+    }
+    tr:last-child td {
+      border-bottom: none;
+    }
+    table.vertex-table th,
+    table.vertex-table td {
+      color: #000;
+      border-bottom-color: rgba(0, 0, 0, 0.12);
+    }
+    table.vertex-table th {
+      background: #e8eaef;
+      color: #000;
+    }
+  </style>
+</head>
+
+<body>
+  <header class="header">
+    <div class="wrap header__inner">
+      <div class="brand">
+        <div class="brand__logo" aria-hidden="true">🚗</div>
+        <div class="brand__text">
+          <h1>Fast Robots</h1>
+          <p>ECE 5160 Spring 2026</p>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a href="../labs.html">Labs</a>
+        <a href="../about.html">About</a>
+        <a href="../collaboration.html">Collaboration Statement</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap section lab">
+    <a class="backlink" href="../labs.html">← Back to Labs</a>
+
+    <h1>Lab 9: Mapping</h1>
+
+    <h2>Overview</h2>
+    <p>
+      The goal of this lab was to build a map of a static room by placing the robot at several marked positions,
+      spinning it on its axis, and collecting Time-of-Flight (ToF) distance readings at each angular step. The
+      resulting point clouds were merged into a single inertial reference frame and used to manually estimate
+      wall positions as line segments.
+    </p>
+    <p>
+      Due to lack of access to the lab space, the environment was replicated at home using cardboard boxes
+      arranged to approximate the room geometry.
+    </p>
+
+    <div class="media-row">
+      <figure class="media-wrap">
+        <img class="media" style="max-width: min(48vw, 520px)" src="../assets/lab9/map_img.png" alt="Photo of the cardboard-box mapping environment" />
+        <figcaption>Figure 1a: Photo of the cardboard-box environment used as the mapping arena.</figcaption>
+      </figure>
+      <figure class="media-wrap">
+        <img class="media" style="max-width: min(48vw, 520px)" src="../assets/lab9/map_img2.png" alt="Top-down measurement model of the mapping environment with wall dimensions" />
+        <figcaption>Figure 1b: Top-down measurement model with wall dimensions (cm).</figcaption>
+      </figure>
+    </div>
+
+    <h2>Control</h2>
+    <p>
+      I used PID control on orientation, with the yaw angle derived from raw gyroscope integration. At each loop
+      iteration, the firmware reads the ICM-20948&apos;s Z-axis gyro rate (<code>myICM.gyrZ()</code>), multiplies
+      by <code>dt</code>, and accumulates it into <code>yaw_gyro_deg</code>. A 5 Hz low-pass filter is then applied
+      to smooth the signal before it is fed into the PID error term. The robot executes 15 steps of 24° each,
+      completing a full 360° rotation. After each step, a single ToF reading is taken.
+    </p>
+    <p>
+      PID gains: <strong>Kp = 0.1, Ki = 0.2, Kd = 0.01</strong>. Additional parameters:
+      <code>duration_ms = 1500</code>, <code>min_pwm = 120</code>, <code>max_pwm = 255</code>,
+      <code>loop_period_ms = 10 ms</code>.
+    </p>
+    <p>
+      A 2° deadband resets the integral term when the error is small, preventing windup near the setpoint.
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-pid-loop">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-pid-loop"><code>while ((millis() - start_ms) &lt; (unsigned long)duration_ms &amp;&amp; yaw_log_count &lt; yaw_log_len) {
+    unsigned long now_us = micros();
+    if (myICM.dataReady()) {
+        myICM.getAGMT();
+        float gz = myICM.gyrZ();
+        float dt_s = ((float)(now_us - yaw_last_time_us)) / 1000000.0f;
+        yaw_gyro_deg += gz * dt_s;
+        angle_deg = yaw_gyro_deg;
+    }
+    float alpha = lpf_alpha_from_dt(dt_s_lpf);
+    yaw_lpf_angle_deg = alpha * angle_deg + (1.0f - alpha) * yaw_lpf_angle_deg;
+    float error = yaw_setpoint_deg - yaw_lpf_angle_deg;
+    float kp_term = yaw_kp * error;
+    yaw_integral_unclamped += error * dt_s;
+    kd_term = yaw_kd * (error - yaw_prev_error) / dt_s;
+    if (fabsf(error) &lt; deadband_deg) {
+        yaw_integral_unclamped = 0.0f; yaw_integral = 0.0f;
+    }
+    float u_unclamped = kp_term + yaw_ki * yaw_integral_unclamped + kd_term;
+    float frac = abs_u / (float)yaw_max_pwm;
+    float mapped = (float)yaw_min_pwm + frac * (float)(yaw_max_pwm - yaw_min_pwm);
+    u_pwm = (int)lroundf(mapped);
+    if (u_clamped &lt; 0.0f) u_pwm = -u_pwm;
+    turn_in_place_signed(motor_pwm);
+    delay((unsigned long)loop_period_ms);
+}
+motors_coast();
+lab9_record_step_after_yaw();</code></pre>
+    </div>
+
+    <figure class="media-wrap">
+      <video class="media" controls>
+        <source src="../assets/lab9/rotation_demo.mp4" type="video/mp4" />
+        Your browser does not support the video tag.
+      </video>
+      <figcaption>Video 1: On-axis rotation with PID orientation control.</figcaption>
+    </figure>
+
+    <h3>Error Analysis</h3>
+    <p>
+      In the middle of a 4×4 m empty room, a single 24° PID step with ~1–2° drift accumulates over 15 steps.
+      The observed total rotation was 361.27° rather than 360°, giving a maximum cumulative gyro error of ~1.3°.
+      At a wall distance of 200 cm, a 1.3° angular error produces a lateral positional error of roughly
+      200 × sin(1.3°) ≈ 4.5 cm. Average error across steps is smaller since drift is not monotonic, estimated
+      around 2–3 cm average lateral error.
+    </p>
+
+    <h2>Reading Out Distances</h2>
+    <p>
+      Three scan positions were used (coordinates in cm from the room origin at bottom-left):
+    </p>
+
+    <table>
+      <thead>
+        <tr><th>Label</th><th>Position (cm)</th><th>Scans</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>P1</td><td>(53, 48)</td><td>2 runs</td></tr>
+        <tr><td>P2</td><td>(120, 58)</td><td>4 runs</td></tr>
+        <tr><td>P3</td><td>(98, 129)</td><td>3 runs</td></tr>
+      </tbody>
+    </table>
+
+    <p>
+      Each position was scanned multiple times to assess repeatability. At each step, after the PID loop
+      completed, a single blocking ToF ranging was triggered on <code>distanceSensor1</code> (VL53L1X,
+      short-range mode):
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-record-step">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-record-step"><code>static void lab9_record_step_after_yaw() {
+    distanceSensor1.startRanging();
+    unsigned long t0 = millis();
+    while (!distanceSensor1.checkForDataReady() &amp;&amp; (millis() - t0) &lt; 120) { delay(1); }
+    if (distanceSensor1.checkForDataReady()) {
+        mm = distanceSensor1.getDistance();
+        distanceSensor1.clearInterrupt();
+    }
+    distanceSensor1.stopRanging();
+}</code></pre>
+    </div>
+
+    <p>
+      This gives exactly <strong>15 ToF readings per 360° rotation</strong>, spaced at nominal 24° increments.
+      The angle assigned to each reading is the actual integrated gyro yaw at the end of that step, not an
+      assumed equal spacing. The robot was started in the same orientation at all positions.
+    </p>
+    <p>
+      Data was returned over BLE as <code>L9ROW:yaw_deg,tof_mm</code> notifications:
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-get-data">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-get-data"><code>case LAB9_SESSION_GET_DATA: {
+    for (int i = 0; i &lt; lab9_tof_n; i++) {
+        tx_estring_value.clear();
+        tx_estring_value.append("L9ROW:");
+        tx_estring_value.append(lab9_yaw_last_deg[i]);
+        tx_estring_value.append(",");
+        tx_estring_value.append(lab9_tof_mm[i]);
+        tx_characteristic_string.writeValue(tx_estring_value.c_str());
+        delay(1);
+    }
+    lab9_tof_n = 0;
+    break;
+}</code></pre>
+    </div>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="py-handler">Copy</button>
+      <span class="codebadge">Python</span>
+      <pre id="py-handler"><code>def parse_l9row(s):
+    if not s.startswith("L9ROW:"): return None
+    parts = s[6:].split(",")
+    return float(parts[0]), int(round(float(parts[1])))
+
+def lab9_string_notification_handler(_uuid, byte_array):
+    raw = ble.bytearray_to_string(byte_array).strip()
+    row = parse_l9row(raw)
+    if row:
+        lab9_session_yaw_deg.append(row[0])
+        lab9_session_tof_mm.append(row[1])</code></pre>
+    </div>
+
+    <p>
+      Individual scans were sanity-checked using polar plots. The distance readings at each heading were
+      compared against the expected geometry of the cardboard box environment.
+    </p>
+
+    <figure class="media-wrap">
+      <img class="media" src="../assets/lab9/polar_plots_individual.png" alt="Individual polar plots for each scan position" />
+      <figcaption>Figure 2: Individual polar plots for each scan position.</figcaption>
+    </figure>
+
+    <p>
+      To check repeatability, multiple scans at the same position were overlaid. Scatter between runs was
+      small — per-step yaw readings were consistently near 24° (e.g., 24.72°, 23.72°), with cumulative drift
+      under 2° over the full rotation. P2 required 4 attempts before a clean scan was achieved due to
+      inconsistent on-axis rotation at that position.
+    </p>
+
+    <figure class="media-wrap">
+      <img class="media" src="../assets/lab9/polar_plot_all.png" alt="Overlay of all scans across all positions" />
+      <figcaption>Figure 3: Overlay of all scans from all positions, showing repeatability.</figcaption>
+    </figure>
+
+    <h2>Merge and Plot Readings</h2>
+
+    <h3>Transformation Matrices</h3>
+    <p>
+      The ToF reading at each step is a scalar distance <em>r</em> measured along the robot&apos;s current
+      heading. To convert to world coordinates, the following transformation is applied.
+    </p>
+    <p>
+      The sensor is mounted 3 cm from the robot&apos;s center of rotation, so first a radial offset correction
+      is applied:
+    </p>
+    <p><code>r_corrected = r_cm + 3.0</code></p>
+    <p>
+      The robot rotates clockwise (positive CW from above), which is the negative direction in standard math
+      convention. The heading is therefore inverted and mapped to a math angle θ measured CCW from +x:
+    </p>
+    <p><code>θ = 180° − (−cumulative_deg + offset_deg)</code></p>
+    <p>The world-frame coordinates are then:</p>
+    <p>
+      <code>x_world = px + r_corrected × cos(θ)</code><br />
+      <code>y_world = py + r_corrected × sin(θ)</code>
+    </p>
+    <p>
+      where <code>(px, py)</code> is the robot&apos;s position in the room. In matrix form, each reading is
+      transformed as:
+    </p>
+
+    <div class="codeblock">
+      <span class="codebadge">Math</span>
+      <pre style="padding-top: 14px;"><code>[x_world]   [cos(θ)  -sin(θ)  px] [r_corrected]
+[y_world] = [sin(θ)   cos(θ)  py] [     0      ]
+[  1    ]   [  0        0      1] [     1      ]</code></pre>
+    </div>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="py-transform">Copy</button>
+      <span class="codebadge">Python</span>
+      <pre id="py-transform"><code>def heading_to_theta_math_deg(cumulative_deg, invert_ccw=False, offset_deg=0.0):
+    base = -cumulative_deg if invert_ccw else cumulative_deg
+    return 180.0 - (base + offset_deg)
+
+def load_scan_xy_world(csv_path, px, py, invert_ccw=False, offset_deg=0.0, radial_offset_cm=0.0):
+    data = np.genfromtxt(csv_path, delimiter=',', names=True, dtype=float)
+    r_cm = data['tof_mm'] / 10.0
+    r_cm = np.maximum(r_cm + radial_offset_cm, 0.0)
+    theta = np.deg2rad(heading_to_theta_math_deg(data['cumulative_deg'], invert_ccw, offset_deg))
+    x = px + r_cm * np.cos(theta)
+    y = py + r_cm * np.sin(theta)
+    return x, y</code></pre>
+    </div>
+
+    <p>
+      Per-position angular offsets were applied to correct for differing starting orientations: P1 +0°,
+      P2 −6°, P3 −7°, plus a global +3° correction for the systematic CW/CCW convention mismatch.
+    </p>
+    <p>
+      All scan positions are plotted together below, with blue shades for P1, green shades for P2, and red
+      shades for P3. Star markers indicate the robot&apos;s position at each scan.
+    </p>
+
+    <figure class="media-wrap">
+      <img class="media" src="../assets/lab9/merged_map.png" alt="Merged world-frame point cloud from all scan positions" />
+      <figcaption>Figure 4: Merged world-frame point cloud. Blue = P1, green = P2, red = P3. Stars mark robot positions.</figcaption>
+    </figure>
+
+    <h2>Line-Based Map</h2>
+    <p>
+      Walls were estimated manually by fitting straight line segments to the scatter plot clusters. The room
+      boundary is a 9-sided non-convex polygon defined by vertices (in cm, origin at bottom-left corner):
+    </p>
+
+    <table class="vertex-table">
+      <thead>
+        <tr><th>Vertex</th><th>x (cm)</th><th>y (cm)</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>A</td><td>0</td><td>0</td></tr>
+        <tr><td>B</td><td>73</td><td>0</td></tr>
+        <tr><td>C</td><td>73</td><td>28</td></tr>
+        <tr><td>D</td><td>144</td><td>28</td></tr>
+        <tr><td>E</td><td>144</td><td>139</td></tr>
+        <tr><td>F</td><td>133</td><td>156</td></tr>
+        <tr><td>G</td><td>48</td><td>156</td></tr>
+        <tr><td>H</td><td>48</td><td>121</td></tr>
+        <tr><td>I</td><td>0</td><td>121</td></tr>
+      </tbody>
+    </table>
+
+    <p>The wall segments as lists for simulator import:</p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="py-walls">Copy</button>
+      <span class="codebadge">Python</span>
+      <pre id="py-walls"><code>x_start = [0,  73,  73,  144, 144, 133, 48,  48,  0]
+x_end   = [73, 73,  144, 144, 133, 48,  48,  0,   0]
+y_start = [0,  0,   28,  28,  139, 156, 156, 121, 121]
+y_end   = [0,  28,  28,  139, 156, 156, 121, 121, 0]</code></pre>
+    </div>
+
+    <h2>Discussion</h2>
+    <p>
+      The angular offset corrections applied during post-processing (−6° at P2, −7° at P3) were caused by the
+      robot being placed in a slightly different starting orientation at those positions relative to P1. Since
+      the robot was not precisely aligned to a fixed reference direction at each scan, a small rotational
+      offset in the reconstructed point cloud was expected. These were corrected by visually aligning the
+      point cloud to the known wall geometry and adjusting <code>rotation_offset_p_deg</code> accordingly.
+    </p>
+    <p>
+      The 3 cm radial offset correction accounts for the physical separation between the ToF sensor and the
+      robot&apos;s pivot center. Without this correction, all points would be shifted slightly inward from
+      their true positions.
+    </p>
+    <p>
+      The main sources of error in the final map are cumulative gyro drift (~1–2° per full rotation) and
+      off-axis rotation — if the robot doesn&apos;t spin cleanly about its center, the point cloud smears.
+      P2 required four attempts for this reason. Despite these limitations, the resulting line segments
+      closely match the known cardboard box geometry, validating the approach.
+    </p>
+
+    <p>
+      <a href="../collaboration.html">Collaboration Statement</a>
+    </p>
+
+    <footer class="footer">
+      <p class="muted">© <span id="year"></span> Coby</p>
+      <p><a class="backlink" href="../collaboration.html">Collaboration Statement</a></p>
+    </footer>
+  </main>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+  <script src="../site.js"></script>
+</body>
+</html>
