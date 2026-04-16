@@ -76,11 +76,14 @@
     tr:last-child td {
       border-bottom: none;
     }
+    table.scan-table th,
+    table.scan-table td,
     table.vertex-table th,
     table.vertex-table td {
       color: #000;
       border-bottom-color: rgba(0, 0, 0, 0.12);
     }
+    table.scan-table th,
     table.vertex-table th {
       background: #e8eaef;
       color: #000;
@@ -207,7 +210,7 @@ lab9_record_step_after_yaw();</code></pre>
       Three scan positions were used (coordinates in cm from the room origin at bottom-left):
     </p>
 
-    <table>
+    <table class="scan-table">
       <thead>
         <tr><th>Label</th><th>Position (cm)</th><th>Scans</th></tr>
       </thead>
@@ -296,12 +299,14 @@ def lab9_string_notification_handler(_uuid, byte_array):
       To check repeatability, multiple scans at the same position were overlaid. Scatter between runs was
       small — per-step yaw readings were consistently near 24° (e.g., 24.72°, 23.72°), with cumulative drift
       under 2° over the full rotation. P2 required 4 attempts before a clean scan was achieved due to
-      inconsistent on-axis rotation at that position.
+      inconsistent on-axis rotation at that position. Per-position angular offsets (P1 +0°, P2 −6°, P3 −7°,
+      plus a global +3° convention correction) were applied to align the point clouds. Blue shades correspond
+      to P1, green to P2, and red to P3; star markers indicate the robot&apos;s position at each scan.
     </p>
 
     <figure class="media-wrap">
-      <img class="media" src="../assets/lab9/polar_plot_all.png" alt="Overlay of all scans across all positions" />
-      <figcaption>Figure 3: Overlay of all scans from all positions, showing repeatability.</figcaption>
+      <img class="media" src="../assets/lab9/polar_plot_all.png" alt="Overlay of all scans across all positions with angular offsets applied" />
+      <figcaption>Figure 3: All scans overlaid with angular offsets applied. Blue = P1, green = P2, red = P3. Stars mark robot positions.</figcaption>
     </figure>
 
     <h2>Merge and Plot Readings</h2>
@@ -354,20 +359,6 @@ def load_scan_xy_world(csv_path, px, py, invert_ccw=False, offset_deg=0.0, radia
     y = py + r_cm * np.sin(theta)
     return x, y</code></pre>
     </div>
-
-    <p>
-      Per-position angular offsets were applied to correct for differing starting orientations: P1 +0°,
-      P2 −6°, P3 −7°, plus a global +3° correction for the systematic CW/CCW convention mismatch.
-    </p>
-    <p>
-      All scan positions are plotted together below, with blue shades for P1, green shades for P2, and red
-      shades for P3. Star markers indicate the robot&apos;s position at each scan.
-    </p>
-
-    <figure class="media-wrap">
-      <img class="media" src="../assets/lab9/merged_map.png" alt="Merged world-frame point cloud from all scan positions" />
-      <figcaption>Figure 4: Merged world-frame point cloud. Blue = P1, green = P2, red = P3. Stars mark robot positions.</figcaption>
-    </figure>
 
     <h2>Line-Based Map</h2>
     <p>
