@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lab 10 | Grid Localization</title>
+  <meta name="description" content="ECE 5160 Spring 2026 Lab 10: Grid localization using Bayes Filter in simulation." />
+  <link rel="stylesheet" href="../style.css" />
+
+  <style>
+    .codeblock {
+      position: relative;
+      margin: 12px 0;
+      border: 1px solid rgba(35,49,79,.75);
+      border-radius: 16px;
+      background: rgba(15,22,38,.8);
+      overflow: hidden;
+    }
+    .codebadge {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(35,49,79,.9);
+      background: rgba(35,49,79,.25);
+      color: rgba(232,237,247,.95);
+      pointer-events: none;
+    }
+    .codeblock pre {
+      margin: 0;
+      padding: 14px;
+      padding-top: 44px;
+      overflow: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      color: rgba(232,237,247,.95);
+    }
+    .copybtn {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      padding: 8px 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(35,49,79,.9);
+      background: rgba(35,49,79,.25);
+      color: rgba(232,237,247,.95);
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .copybtn:hover {
+      border-color: rgba(122,167,255,.55);
+      background: rgba(122,167,255,.14);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 14px;
+    }
+    th, td {
+      padding: 10px 14px;
+      text-align: left;
+      border-bottom: 1px solid rgba(0,0,0,.12);
+    }
+    th {
+      color: #000;
+      font-weight: 600;
+      background: #e8eaef;
+    }
+    td {
+      color: #000;
+    }
+    tr:last-child td {
+      border-bottom: none;
+    }
+  </style>
+</head>
+
+<body>
+  <header class="header">
+    <div class="wrap header__inner">
+      <div class="brand">
+        <div class="brand__logo" aria-hidden="true">🚗</div>
+        <div class="brand__text">
+          <h1>Fast Robots</h1>
+          <p>ECE 5160 Spring 2026</p>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a href="../labs.html">Labs</a>
+        <a href="../about.html">About</a>
+        <a href="../collaboration.html">Collaboration Statement</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap section lab">
+    <a class="backlink" href="../labs.html">← Back to Labs</a>
+
+    <h1>Lab 10: Grid Localization using Bayes Filter</h1>
+
+    <h2>Overview</h2>
+    <p>
+      Without an absolute position sensor, the robot has to figure out where it is from indirect evidence.
+      Odometry accumulates error quickly, as the previous lab showed. This lab takes a different approach:
+      instead of maintaining a single pose guess, the robot tracks a probability distribution over all possible
+      poses simultaneously. The Bayes Filter updates that distribution at each time step using motion and
+      sensor information, letting confidence build up over time rather than committing prematurely to one answer.
+    </p>
+    <p>
+      The pose space (x, y, θ) is continuous, so it gets discretized into a 12 by 9 by 18 grid with cells
+      0.3048 m wide and 20 degrees deep, giving 1944 cells total. Each cell holds the probability that the
+      robot currently occupies that pose. Two operations run every iteration: a <strong>prediction step</strong>
+      that smears the belief based on how the robot moved, and an <strong>update step</strong> that tightens
+      it back up using sensor data.
+    </p>
+
+    <h2>Implementation</h2>
+
+    <h3>compute_control</h3>
+    <p>
+      Any motion between two consecutive poses can be described by three quantities: an initial rotation
+      to face the direction of movement, a straight translation, and a final rotation to reach the new
+      heading. This function extracts those values from a pair of odometry readings. When the translation
+      is nearly zero, the initial rotation is forced to zero rather than computing arctan2 on nearly zero
+      inputs. All angles are wrapped to the interval [&minus;180°, 180°) so the Gaussians in the motion
+      model behave correctly.
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="py-compute-control">Copy</button>
+      <span class="codebadge">Python</span>
+      <pre id="py-compute-control"><code>def compute_control(cur_pose, prev_pose):
+    dx = cur_pose[0] - prev_pose[0]
+    dy = cur_pose[1] - prev_pose[1]
+
+    delta_trans = np.hypot(dx, dy)
+    if delta_trans &lt; 1e-4:
+        delta_rot_1 = 0.0
+    else:
+        delta_rot_1 = mapper.normalize_angle(np.degrees(np.arctan2(dy, dx)) - prev_pose[2])
+    delta_rot_2 = mapper.normalize_angle(cur_pose[2] - prev_pose[2] - delta_rot_1)
+
+    return delta_rot_1, delta_trans, delta_rot_2</code></pre>
+    </div>
+
+    <h3>odom_motion_model</h3>
+    <p>
+      This function evaluates how likely a given state transition is under the observed odometry.
+      It recomputes the control decomposition for a hypothetical previous and current pose pair, then
+      evaluates a Gaussian for each of the three components against the actual measured control. The three
+      values are multiplied together to produce the overall transition probability. Angle differences are
+      normalized before going into the Gaussian to prevent wraparound issues near the interval boundaries.
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="py-odom-model">Copy</button>
+      <span class="codebadge">Python</span>
+      <pre id="py-odom-model"><code>def odom_motion_model(cur_pose, prev_pose, u):
+    rot1_needed, trans_needed, rot2_needed = compute_control(cur_pose, prev_pose)
+
+    p_rot1  = loc.gaussian(mapper.normalize_angle(u[0] - rot1_needed),  0, loc.odom_rot_sigma)
+    p_trans = loc.gaussian(u[1] - trans_needed,                          0, loc.odom_trans_sigma)
+    p_rot2  = loc.gaussian(mapper.normalize_angle(u[2] - rot2_needed),  0, loc.odom_rot_sigma)
+
+    return p_rot1 * p_trans * p_rot2</code></pre>
+    </div>
+
+    <h3>prediction_step</h3>
+    <p>
+      Each call to the prediction step updates <code>bel_bar</code> by iterating over all prior cells
+      and distributing their probability forward through the motion model. The naive version requires
+      1944 squared evaluations per call, which takes too long. Since the update step concentrates belief
+      onto very few cells each iteration, skipping any prior cell below 0.0001 probability has almost
+      no effect on the final result and brings the runtime down to a few seconds per step.
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="py-prediction">Copy</button>
+      <span class="codebadge">Python</span>
+      <pre id="py-prediction"><code>def prediction_step(cur_odom, prev_odom):
+    u = compute_control(cur_odom, prev_odom)
+    loc.bel_bar = np.zeros((mapper.MAX_CELLS_X, mapper.MAX_CELLS_Y, mapper.MAX_CELLS_A))
+
+    for px in range(mapper.MAX_CELLS_X):
+        for py in range(mapper.MAX_CELLS_Y):
+            for pa in range(mapper.MAX_CELLS_A):
+                prior = loc.bel[px, py, pa]
+                if prior &lt; 0.0001:
+                    continue
+                prev_world = mapper.from_map(px, py, pa)
+                for cx in range(mapper.MAX_CELLS_X):
+                    for cy in range(mapper.MAX_CELLS_Y):
+                        for ca in range(mapper.MAX_CELLS_A):
+                            cur_world = mapper.from_map(cx, cy, ca)
+                            loc.bel_bar[cx, cy, ca] += odom_motion_model(cur_world, prev_world, u) * prior
+
+    loc.bel_bar /= np.sum(loc.bel_bar)</code></pre>
+    </div>
+
+    <h3>update_step</h3>
+    <p>
+      After spinning in place to collect 18 range readings, those measurements are compared against
+      the precomputed true distances stored for every cell. Rather than looping over cells in Python,
+      the Gaussian is broadcast directly over the full <code>obs_views</code> array at once using NumPy.
+      The product of likelihoods across all 18 angles is taken per cell with <code>np.prod(axis=3)</code>,
+      multiplied against <code>bel_bar</code>, and renormalized. This single step does most of the work
+      in terms of localization accuracy.
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="py-update">Copy</button>
+      <span class="codebadge">Python</span>
+      <pre id="py-update"><code>def update_step():
+    likelihoods = loc.gaussian(mapper.obs_views, loc.obs_range_data.reshape(-1), loc.sensor_sigma)
+    loc.bel = np.prod(likelihoods, axis=3) * loc.bel_bar
+    loc.bel /= np.sum(loc.bel)</code></pre>
+    </div>
+
+    <h2>Results</h2>
+    <p>
+      The filter ran for 13 steps over the default trajectory. After each update, the belief converged
+      to a single dominant cell with probability at or very near 1.0. Position error stayed below one
+      cell width (0.3048 m) for every step and was under 0.2 m for most of them. Step 12 near the
+      center of the room was the hardest, where a few neighboring cells had similar sensor signatures
+      and the probability dropped to 0.998.
+    </p>
+    <p>
+      Steps 5 through 9 along the wall on the right side were the most reliable. Close range readings
+      from nearby surfaces are distinctive, so the sensor model easily rules out most of the grid.
+      Even when the prediction step spread the prior very broadly, the update step pulled the belief
+      back to the correct cell.
+    </p>
+
+    <table>
+      <thead>
+        <tr><th>Step</th><th>GT index (x,y,θ)</th><th>Belief index (x,y,θ)</th><th>Prob</th><th>Position error (m)</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>0</td><td>(6, 3, 7)</td><td>(6, 3, 7)</td><td>1.000</td><td>(0.019, 0.233)</td></tr>
+        <tr><td>1</td><td>(7, 2, 6)</td><td>(7, 2, 6)</td><td>1.000</td><td>(0.071, 0.116)</td></tr>
+        <tr><td>2</td><td>(7, 2, 4)</td><td>(6, 2, 4)</td><td>1.000</td><td>(0.234, 0.116)</td></tr>
+        <tr><td>3</td><td>(7, 1, 4)</td><td>(7, 1, 4)</td><td>1.000</td><td>(0.013, 0.025)</td></tr>
+        <tr><td>4</td><td>(8, 0, 9)</td><td>(8, 1, 9)</td><td>1.000</td><td>(0.049, 0.096)</td></tr>
+        <tr><td>5</td><td>(11, 1, 11)</td><td>(10, 1, 11)</td><td>1.000</td><td>(0.109, 0.105)</td></tr>
+        <tr><td>6</td><td>(11, 2, 13)</td><td>(11, 3, 13)</td><td>1.000</td><td>(0.131, 0.117)</td></tr>
+        <tr><td>7</td><td>(11, 3, 13)</td><td>(11, 4, 13)</td><td>1.000</td><td>(0.072, 0.066)</td></tr>
+        <tr><td>8</td><td>(11, 5, 14)</td><td>(11, 6, 14)</td><td>1.000</td><td>(0.089, 0.185)</td></tr>
+        <tr><td>9</td><td>(11, 6, 16)</td><td>(11, 7, 16)</td><td>1.000</td><td>(0.101, 0.165)</td></tr>
+        <tr><td>10</td><td>(10, 7, 17)</td><td>(9, 8, 17)</td><td>1.000</td><td>(0.078, 0.216)</td></tr>
+        <tr><td>11</td><td>(7, 6, 3)</td><td>(7, 7, 3)</td><td>1.000</td><td>(0.172, 0.051)</td></tr>
+        <tr><td>12</td><td>(6, 4, 6)</td><td>(6, 5, 5)</td><td>0.998</td><td>(0.013, 0.063)</td></tr>
+      </tbody>
+    </table>
+
+    <figure class="media-wrap">
+      <video class="media" controls>
+        <source src="../assets/lab10/lab10.mp4" type="video/mp4" />
+        Your browser does not support the video tag.
+      </video>
+      <figcaption>Video 1: Bayes Filter running in simulation. Green = ground truth, red = odometry, blue = belief.</figcaption>
+    </figure>
+
+    <p>
+      <a href="../collaboration.html">Collaboration Statement</a>
+    </p>
+
+    <footer class="footer">
+      <p class="muted">© <span id="year"></span> Coby</p>
+      <p><a class="backlink" href="../collaboration.html">Collaboration Statement</a></p>
+    </footer>
+  </main>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+  <script src="../site.js"></script>
+</body>
+</html>
