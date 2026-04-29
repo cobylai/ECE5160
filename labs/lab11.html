@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lab 11 | Localization (Real Robot)</title>
+  <meta name="description" content="ECE 5160 Spring 2026 Lab 11: Localization on the real robot using the Bayes Filter update step." />
+  <link rel="stylesheet" href="../style.css" />
+
+  <style>
+    .codeblock {
+      position: relative;
+      margin: 12px 0;
+      border: 1px solid rgba(35,49,79,.75);
+      border-radius: 16px;
+      background: rgba(15,22,38,.8);
+      overflow: hidden;
+    }
+    .codebadge {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(35,49,79,.9);
+      background: rgba(35,49,79,.25);
+      color: rgba(232,237,247,.95);
+      pointer-events: none;
+    }
+    .codeblock pre {
+      margin: 0;
+      padding: 14px;
+      padding-top: 44px;
+      overflow: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      color: rgba(232,237,247,.95);
+    }
+    .copybtn {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      padding: 8px 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(35,49,79,.9);
+      background: rgba(35,49,79,.25);
+      color: rgba(232,237,247,.95);
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .copybtn:hover {
+      border-color: rgba(122,167,255,.55);
+      background: rgba(122,167,255,.14);
+    }
+    .media-wrap {
+      text-align: center;
+    }
+    img.media {
+      display: block;
+      margin: 0 auto;
+    }
+    .pose-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      justify-items: center;
+      gap: 12px;
+      margin: 12px 0;
+    }
+    .pose-grid .media-wrap {
+      margin: 0;
+      width: 100%;
+    }
+    .pose-grid img.media {
+      max-height: 352px;
+      width: auto;
+      max-width: 100%;
+      object-fit: contain;
+    }
+    @media (max-width: 600px) {
+      .pose-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+
+<body>
+  <header class="header">
+    <div class="wrap header__inner">
+      <div class="brand">
+        <div class="brand__logo" aria-hidden="true">🚗</div>
+        <div class="brand__text">
+          <h1>Fast Robots</h1>
+          <p>ECE 5160 Spring 2026</p>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a href="../labs.html">Labs</a>
+        <a href="../about.html">About</a>
+        <a href="../collaboration.html">Collaboration Statement</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap section lab">
+    <a class="backlink" href="../labs.html">← Back to Labs</a>
+
+    <h1>Lab 11: Localization on the Real Robot</h1>
+
+    <h2>Objective</h2>
+    <p>
+      The goal of this lab was to run the Bayes filter on the actual robot and compare localization
+      accuracy against simulation. Because the robot's motion is too noisy to get anything useful out of
+      a prediction step, only the <strong>update step</strong> is used: the robot spins 360&deg; in
+      place, takes a ToF reading every 20&deg;, and those 18 measurements are fed into the filter starting
+      from a uniform prior. This was tested at four marked positions in the lab space.
+    </p>
+
+    <h2>Simulation</h2>
+    <p>
+      First I ran <code>lab11_sim.ipynb</code> to confirm the Bayes filter implementation was working
+      before touching the real robot. The belief tracked the ground truth closely throughout the trajectory,
+      which matched what was seen in Lab 10.
+    </p>
+
+    <figure class="media-wrap">
+      <img class="media" src="../assets/lab11/sim.png" alt="Simulation result: odom (red), ground truth (green), belief (blue)" />
+      <figcaption>Figure 1: Simulation result. Red = odometry, green = ground truth, blue = belief.</figcaption>
+    </figure>
+
+    <p>
+      The simulation confirmed that the provided localization code is functional, so any issues on the real
+      robot would come down to sensor data quality rather than the filter itself.
+    </p>
+
+    <h2>Real Robot Implementation</h2>
+    <p>
+      To get sensor data from the real robot I implemented <code>perform_observation_loop()</code> in the
+      <code>RealRobot</code> class. This reuses the step-based yaw PID approach from Lab 9: a
+      <code>YAW_PID_START</code> command is sent for each 20&deg; increment, which tells the Artemis to
+      rotate to that heading, hold it with PID, and log a ToF reading. After all 18 steps complete,
+      <code>LAB9_SESSION_GET_DATA</code> flushes all rows back over BLE as
+      <code>L9ROW:&lt;yaw&gt;,&lt;tof_mm&gt;</code> notifications. The code also pulls from the
+      provided demo notebook and localization extras, which I modified to work with my existing BLE command
+      structure.
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="py-obs-loop">Copy</button>
+      <span class="codebadge">Python</span>
+      <pre id="py-obs-loop"><code>def perform_observation_loop(self, rot_vel=120):
+    obs_count = int(self.config_params.get("observation_count", 18))
+    step_deg  = int(round(360.0 / obs_count))   # 20 degrees
+
+    kp, ki, kd      = 0.1, 0.2, 0.01
+    duration_ms      = 1500
+    min_pwm, max_pwm = 120, 255
+    loop_period_ms   = 10
+
+    rows = []
+
+    def _notif_handler(_uuid, byte_array):
+        raw = self.ble.bytearray_to_string(byte_array).strip()
+        if not raw.startswith("L9ROW:"):
+            return
+        parts = raw[6:].split(",")
+        if len(parts) == 2:
+            try:
+                rows.append((float(parts[0]), int(parts[1])))
+            except ValueError:
+                pass
+
+    self.ble.start_notify(self.ble.uuid["RX_STRING"], _notif_handler)
+    try:
+        self.ble.send_command(CMD.LAB9_TOF_CLEAR, "")
+        time.sleep(0.05)
+
+        for _ in range(obs_count):
+            payload = (f"{step_deg}|{kp}|{ki}|{kd}|"
+                       f"{duration_ms}|{min_pwm}|{max_pwm}|{loop_period_ms}")
+            self.ble.send_command(CMD.YAW_PID_START, payload)
+
+        rows.clear()
+        self.ble.send_command(CMD.LAB9_SESSION_GET_DATA, "")
+        time.sleep(7.0)
+    finally:
+        self.ble.stop_notify(self.ble.uuid["RX_STRING"])
+
+    ranges_m, bearings_deg = [], []
+    for i, (_yaw, tof_mm) in enumerate(rows[:obs_count]):
+        ranges_m.append(tof_mm / 1000.0 if tof_mm &gt;= 0 else np.nan)
+        bearings_deg.append(float(i * step_deg))
+
+    while len(ranges_m) &lt; obs_count:
+        ranges_m.append(np.nan)
+        bearings_deg.append(float(len(bearings_deg) * step_deg))
+
+    sensor_ranges   = np.array(ranges_m,   dtype=float)[np.newaxis].T
+    sensor_bearings = np.array(bearings_deg, dtype=float)[np.newaxis].T
+    return sensor_ranges, sensor_bearings</code></pre>
+    </div>
+
+    <p>
+      The 18 <code>YAW_PID_START</code> commands are sent back-to-back and the Artemis queues them,
+      running each step after the previous one finishes. Because each command carries the same PID gains,
+      clamp limits, and hold duration, every angular sample is taken under consistent controller settings,
+      which keeps the scan more repeatable from run to run.
+    </p>
+    <p>
+      After the command queue drains, the host requests all logged rows in one transfer and keeps
+      notifications open long enough for the full packet stream to arrive. The parser only accepts
+      <code>L9ROW:</code> frames and ignores anything malformed, so bad BLE text does not poison the
+      observation array. Finally, ToF values are converted from mm to meters, missing entries are padded
+      with <code>NaN</code>, and both ranges and bearings are returned as column vectors matching the
+      localization module interface.
+    </p>
+
+    <h2>Localization Results</h2>
+    <p>
+      The robot was placed at each of the four marked poses and the update step was run from a uniform
+      prior. Green marker = ground truth, blue marker = filter belief.
+    </p>
+
+    <div class="pose-grid">
+      <figure class="media-wrap">
+        <img class="media" src="../assets/lab11/-3-2 plotter.png" alt="Belief plot for pose (-3,-2)" />
+        <figcaption>Plotter (&minus;3,&minus;2)</figcaption>
+      </figure>
+    </div>
+
+    <div class="pose-grid">
+      <figure class="media-wrap">
+        <img class="media" src="../assets/lab11/0 3 plotter.png" alt="Belief plot for pose (0,3)" />
+        <figcaption>Plotter (0,3)</figcaption>
+      </figure>
+    </div>
+
+    <div class="pose-grid">
+      <figure class="media-wrap">
+        <img class="media" src="../assets/lab11/5 -3 plotter.png" alt="Belief plot for pose (5,-3)" />
+        <figcaption>Plotter (5,&minus;3)</figcaption>
+      </figure>
+    </div>
+
+    <div class="pose-grid">
+      <figure class="media-wrap">
+        <img class="media" src="../assets/lab11/5 3 plotter.png" alt="Belief plot for pose (5,3)" />
+        <figcaption>Plotter (5,3)</figcaption>
+      </figure>
+    </div>
+
+
+    <h2>Discussion</h2>
+    <p>
+      All four poses localized reasonably well. The step-based rotation was a big part of why:
+      stopping at each 20&deg; increment with the yaw PID means the ToF reading is taken while the robot
+      is stationary, so each sample is cleanly tied to its nominal angle. Continuous spinning would
+      introduce a timing mismatch that corrupts the angular assignment.
+    </p>
+    <p>
+      Relative to ground truth, each estimate landed in the correct region with a modest but noticeable
+      margin of error, which is expected from ToF noise, heading quantization at 20&deg; steps, and small
+      repeatability limits in real robot motion.
+    </p>
+    <p>
+      The 18-angle sweep gives the filter enough angular coverage that even poses without a wall directly
+      nearby still produce a distinctive enough signature to constrain the belief. Starting from a uniform
+      prior and skipping the prediction step entirely also helped. On a real robot, wheel slip and
+      motor imbalance would just smear the belief if a motion model were involved, so letting the sensor
+      data do all the work each spin was the right call.
+    </p>
+
+    <footer class="footer">
+      <p class="muted">© <span id="year"></span> Coby</p>
+      <p><a class="backlink" href="../collaboration.html">Collaboration Statement</a></p>
+    </footer>
+  </main>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+  <script src="../site.js"></script>
+</body>
+</html>
