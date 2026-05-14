@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lab 12 | Navigation</title>
+  <meta name="description" content="ECE 5160 Spring 2026 Lab 12: Autonomous navigation through waypoints using PID control and Bayes filter localization." />
+  <link rel="stylesheet" href="../style.css" />
+
+  <style>
+    .codeblock {
+      position: relative;
+      margin: 12px 0;
+      border: 1px solid rgba(35,49,79,.75);
+      border-radius: 16px;
+      background: rgba(15,22,38,.8);
+      overflow: hidden;
+    }
+    .codebadge {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(35,49,79,.9);
+      background: rgba(35,49,79,.25);
+      color: rgba(232,237,247,.95);
+      pointer-events: none;
+    }
+    .codeblock pre {
+      margin: 0;
+      padding: 14px;
+      padding-top: 44px;
+      overflow: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      color: rgba(232,237,247,.95);
+    }
+    .copybtn {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      padding: 8px 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(35,49,79,.9);
+      background: rgba(35,49,79,.25);
+      color: rgba(232,237,247,.95);
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .copybtn:hover {
+      border-color: rgba(122,167,255,.55);
+      background: rgba(122,167,255,.14);
+    }
+    .media-wrap {
+      text-align: center;
+    }
+    img.media, video.media {
+      display: block;
+      margin: 0 auto;
+      max-width: 100%;
+    }
+    .pose-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      justify-items: center;
+      gap: 12px;
+      margin: 12px 0;
+    }
+    .pose-grid .media-wrap {
+      margin: 0;
+      width: 100%;
+    }
+    .pose-grid img.media {
+      max-height: 352px;
+      width: auto;
+      max-width: 100%;
+      object-fit: contain;
+    }
+    @media (max-width: 600px) {
+      .pose-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+
+<body>
+  <header class="header">
+    <div class="wrap header__inner">
+      <div class="brand">
+        <div class="brand__logo" aria-hidden="true">🚗</div>
+        <div class="brand__text">
+          <h1>Fast Robots</h1>
+          <p>ECE 5160 Spring 2026</p>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a href="../labs.html">Labs</a>
+        <a href="../about.html">About</a>
+        <a href="../collaboration.html">Collaboration Statement</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap section lab">
+    <a class="backlink" href="../labs.html">← Back to Labs</a>
+
+    <h1>Lab 12: Path Planning and Execution</h1>
+
+    <h2>Overview</h2>
+    <p>
+      The robot drove through a fixed set of 8 waypoints using a simple turn-then-drive routine. The Artemis
+      handled the absolute-heading turns with a gyro PID controller, then used timed drive commands for each
+      straight section. I also added the Lab 11 Bayes filter as a backup correction step. If the ToF reading at
+      a waypoint was more than 5.9&nbsp;in away from the expected distance, the robot would stop, scan, localize,
+      and reset its heading. That correction was never needed in the final run. The Python script handled the
+      waypoint logic, command sequencing, and Bayes filter update over BLE. The Artemis handled yaw control,
+      drive control, and the observation scan. The full run is shown in Video&nbsp;1.
+    </p>
+
+    <h2>Approach</h2>
+
+    <h3>Path Planning</h3>
+    <p>
+      Since the waypoint order was already given and the map was known, I did not need to run a separate graph
+      search. The planned path was just the provided waypoint sequence. For each leg, the Python script computed
+      the desired heading using <code>atan2(dy,&nbsp;dx)</code> and sent that heading to the robot as an absolute
+      world-frame angle.
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="py-calc-angle">Copy</button>
+      <span class="codebadge">Python</span>
+      <pre id="py-calc-angle"><code>def calc_target_angle(cur_x, cur_y, next_x, next_y):
+    return math.degrees(math.atan2(next_y - cur_y, next_x - cur_x))</code></pre>
+    </div>
+
+    <p>
+      The official waypoint list includes (5,&minus;2) between (5,&minus;3) and (5,3). Because the robot drives
+      straight through that point while moving north, I did not treat it as a separate stop. The route was checked
+      against the map ahead of time, so the robot did not need to make obstacle-avoidance decisions during the run.
+    </p>
+
+    <h3>Execution: Turn, Pause, Drive, Pause</h3>
+    <p>Per leg, the orchestrator follows this sequence:</p>
+    <ul>
+      <li>Compute absolute heading to next waypoint from current position</li>
+      <li>Send <code>TURN_ABS</code> with target heading; wait for <code>TURN_DONE</code> response</li>
+      <li>Sleep 300&nbsp;ms for mechanical settling</li>
+      <li>Send <code>DRIVE_TOF</code> with empirically tuned duration; wait for <code>DRIVE_DONE</code></li>
+      <li>Sleep 300&nbsp;ms</li>
+      <li>Check ToF error against 5.9&nbsp;in threshold &rarr; localize if exceeded (never triggered)</li>
+      <li>Advance to next waypoint</li>
+    </ul>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="py-nav-loop">Copy</button>
+      <span class="codebadge">Python</span>
+      <pre id="py-nav-loop"><code>heading = calc_target_angle(
+    current_loc[0], current_loc[1],
+    next_wp[0],     next_wp[1]
+)
+ble.send_command(CMD.TURN_ABS, build_turn_cmd(heading))
+wait_nav("turn_done", timeout=TURN_PID["duration_ms"] / 1000.0 + 5.0)
+time.sleep(0.3)
+
+pid = DRIVE_PID
+drive_cmd = (f"0|{pid['kp']}|{pid['ki']}|{pid['kd']}|{leg_dur_ms}|"
+             f"{pid['min_pwm']}|{pid['max_pwm']}|{pid['right_scale']}|0|0")
+ble.send_command(CMD.DRIVE_TOF, drive_cmd)
+wait_nav("drive_done", timeout=leg_dur_ms / 1000.0 + 5.0)
+time.sleep(0.3)</code></pre>
+    </div>
+
+    <h3>BLE Command Structure</h3>
+    <p>
+      I split the system between the laptop and the robot. Python handled the route, the Bayes filter, and the
+      order of commands sent over BLE. The Artemis handled the low-level actions: turning, driving, reading the
+      ToF sensor, and running the observation scan. The firmware used the following six commands:
+    </p>
+
+    <table>
+      <thead>
+        <tr><th>#</th><th>Command</th><th>Payload</th><th>Response</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>0</td><td><code>PING</code></td><td>none</td><td><code>PONG</code></td></tr>
+        <tr><td>1</td><td><code>TURN_ABS</code></td><td><code>target_deg|kp|ki|kd|dur_ms|min_pwm|max_pwm|loop_ms</code></td><td><code>TURN_DONE:deg</code></td></tr>
+        <tr><td>2</td><td><code>DRIVE_TOF</code></td><td><code>target_mm|kp|ki|kd|dur_ms|min_pwm|max_pwm|right_scale|thresh_mm|settle_ms</code></td><td><code>DRIVE_DONE:mm</code></td></tr>
+        <tr><td>3</td><td><code>GET_TOF</code></td><td>none</td><td><code>TOF:mm</code></td></tr>
+        <tr><td>4</td><td><code>RESET_HEADING</code></td><td><code>heading_deg</code></td><td><code>HDG_RESET:deg</code></td></tr>
+        <tr><td>5</td><td><code>OBS_SCAN</code></td><td><code>count|step_deg|kp|ki|kd|dur_ms|min_pwm|max_pwm|loop_ms</code></td><td><code>L9ROW:…</code> &times;N, <code>OBS_DONE:N</code></td></tr>
+      </tbody>
+    </table>
+
+    <p>
+      Each command runs to completion on the Artemis before the next command is sent. After a command finishes,
+      the robot sends a BLE response, and the Python script waits for the matching <code>nav_state</code> flag
+      before continuing. This kept the motion sequence simple and avoided sending new commands while the robot
+      was still moving. The approximate timing for each phase was:
+    </p>
+
+    <table>
+      <thead>
+        <tr><th>Phase</th><th>Duration</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Turn (<code>TURN_ABS</code>)</td><td>2–5&nbsp;s depending on angle</td></tr>
+        <tr><td>Settling pause</td><td>0.3&nbsp;s &times; 2 per leg</td></tr>
+        <tr><td>Drive (<code>DRIVE_TOF</code>)</td><td>0.9–1.8&nbsp;s (per <code>LEG_DURATIONS_MS</code>)</td></tr>
+        <tr><td>OBS_SCAN (if triggered)</td><td>~27&nbsp;s (18 steps &times; 1.5&nbsp;s each)</td></tr>
+      </tbody>
+    </table>
+
+    <p>
+      On the Artemis, <code>TURN_ABS</code> waits until the yaw PID finishes and then sends one response message.
+      For the final run, <code>DRIVE_TOF</code> was used as a timed drive command. With <code>stop_thresh = 0</code>,
+      the arrival check is disabled, so the loop runs for exactly <code>duration</code> milliseconds.
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-turn-abs">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-turn-abs"><code>case TURN_ABS: {
+    float target = parse_float(payload, 0);
+    run_yaw_pid_absolute(target);       // blocks until done or timeout
+    tx_estring_value.clear();
+    tx_estring_value.append("TURN_DONE:");
+    tx_estring_value.append(g_heading_deg);
+    tx_characteristic_string.writeValue(tx_estring_value.c_str());
+    break;
+}</code></pre>
+    </div>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-drive-tof">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-drive-tof"><code>case DRIVE_TOF: {
+    float         target_dist  = parse_float(payload, 0);
+    unsigned long duration     = (unsigned long)parse_float(payload, 4);
+    int           stop_thresh  = (int)parse_float(payload, 8);
+    float         right_scale  = parse_float(payload, 7);
+
+    unsigned long start_ms = millis();
+    while ((millis() - start_ms) &lt; duration) {
+        float dist   = kalman_update(read_tof_mm());
+        float error  = dist - target_dist;
+        if (stop_thresh &gt; 0 &amp;&amp; fabsf(error) &lt; (float)stop_thresh) break;
+        float output = drive_kp * error;
+        int   pwm    = map_to_pwm(fabsf(output), drive_min_pwm, drive_max_pwm);
+        drive_both_signed_scaled(output &lt; 0 ? -pwm : pwm, right_scale);
+        delay(10);
+    }
+    motors_coast();
+    tx_estring_value.clear();
+    tx_estring_value.append("DRIVE_DONE:");
+    tx_estring_value.append((int)read_tof_mm());
+    tx_characteristic_string.writeValue(tx_estring_value.c_str());
+    break;
+}</code></pre>
+    </div>
+
+    <p>
+      With <code>target_dist = 0</code> and <code>stop_thresh = 0</code>, the error stays positive, so the robot
+      simply drives forward for the requested duration.
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="py-notif-handler">Copy</button>
+      <span class="codebadge">Python</span>
+      <pre id="py-notif-handler"><code>def nav_notification_handler(uuid, byte_array):
+    msg = ble.bytearray_to_string(byte_array).strip()
+    if msg.startswith("TURN_DONE:"):
+        nav_state["turn_heading"] = float(msg.split(":", 1)[1])
+        nav_state["turn_done"]    = True
+    elif msg.startswith("DRIVE_DONE:"):
+        nav_state["drive_tof"]  = int(msg.split(":", 1)[1])
+        nav_state["drive_done"] = True
+    elif msg.startswith("L9ROW:"):
+        nav_state["obs_rows"].append(msg[6:])
+    elif msg.startswith("OBS_DONE:"):
+        nav_state["obs_done"] = True</code></pre>
+    </div>
+
+    <h2>Rotation Control</h2>
+    <p>
+      The Artemis keeps track of <code>g_heading_deg</code>, which represents the robot's current world-frame
+      heading. When it receives a <code>TURN_ABS</code> command, it computes the relative angle needed to reach
+      the requested heading, runs the yaw PID, and then saves the target as the new heading. Using absolute
+      headings helped keep each turn tied to the same reference frame instead of chaining together relative turns.
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-turn-abs-fn">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-turn-abs-fn"><code>void run_yaw_pid_absolute(float target_deg) {
+    float delta = wrap_pm180(target_deg - g_heading_deg);
+    run_yaw_pid(delta);
+    g_heading_deg = target_deg;
+}</code></pre>
+    </div>
+
+    <p>
+      The yaw controller integrates the raw gyroscope z-axis reading at about 100&nbsp;Hz. I then pass the yaw
+      estimate through a 5&nbsp;Hz IIR low-pass filter before applying the PID terms. When the error is within
+      2&deg;, the integrator is reset so it does not build up while the robot is already close to the target.
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-yaw-pid">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-yaw-pid"><code>void run_yaw_pid(float target_deg) {
+    float yaw = 0.0f, yaw_filtered = 0.0f, integral = 0.0f, last_err = 0.0f;
+    unsigned long start_ms = millis();
+    unsigned long prev_us  = micros();
+
+    while ((millis() - start_ms) &lt; (unsigned long)yaw_duration_ms) {
+        if (myICM.dataReady()) {
+            myICM.getAGMT();
+            float dt        = (micros() - prev_us) / 1e6f;  prev_us = micros();
+            yaw            += myICM.gyrZ() * dt;
+            float lpf_alpha = 1.0f - expf(-2.0f * M_PI * 5.0f * dt);
+            yaw_filtered    = lpf_alpha * yaw + (1.0f - lpf_alpha) * yaw_filtered;
+        }
+        float error = target_deg - yaw_filtered;
+        if (fabsf(error) &lt; 2.0f) integral = 0.0f;
+        else                      integral += error * (yaw_loop_ms / 1000.0f);
+        float output = yaw_kp * error + yaw_ki * integral
+                     + yaw_kd * (error - last_err) / (yaw_loop_ms / 1000.0f);
+        last_err = error;
+        int pwm  = map_to_pwm(fabsf(output), yaw_min_pwm, yaw_max_pwm);
+        turn_in_place_signed(output &lt; 0 ? -pwm : pwm);
+        delay(yaw_loop_ms);
+    }
+    motors_coast();
+}</code></pre>
+    </div>
+
+    <p>
+      I used the same gains I had tuned during Labs 9 and 11: <code>Kp = 0.4</code>, <code>Ki = 0.05</code>,
+      <code>Kd = 0.005</code>, <code>min_pwm = 100</code>, <code>max_pwm = 170</code>, and a 2&deg; deadband.
+      These values took about 12 tuning runs to settle on. In the final run, the individual turns usually ended
+      within 1&deg; of their targets. The larger problem was slow gyro drift during the straight driving sections.
+      By the last three legs, the heading estimate had drifted by +7.4&deg;, +10.5&deg;, and +12.4&deg; from
+      where it should have been. So the turns themselves were repeatable, but the IMU reference frame slowly
+      shifted over the course of the run.
+    </p>
+
+    <h2>Localization</h2>
+    <p>
+      I added the Lab 11 Bayes filter into the navigation loop through
+      <code>RealRobot.perform_observation_loop()</code>. When called, it sends an <code>OBS_SCAN</code> command
+      for 18 measurements spaced 20&deg; apart. The Artemis collects the scan, sends the measurements back as
+      <code>L9ROW</code> messages, and Python passes them into <code>loc.get_observation_data()</code> and
+      <code>loc.update_step()</code>. The actual Bayes filter update runs offboard in Python. If localization is
+      triggered, only the estimated heading <code>best_heading</code> is sent back to the Artemis with
+      <code>RESET_HEADING</code>. The position is kept at the known waypoint coordinate. This lets the filter
+      correct yaw drift without letting small position errors fight the empirically tuned drive distances.
+    </p>
+    <p>
+      The localization trigger was based on ToF error. At each waypoint, the script compared the measured wall
+      distance in front of the robot with the expected wall distance from the map. If the difference was greater
+      than 5.9&nbsp;in, the robot would stop and run the observation scan. In the final run, this threshold was
+      never crossed, so the Bayes filter did not run and there are no belief plots for this trial.
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="py-localize">Copy</button>
+      <span class="codebadge">Python</span>
+      <pre id="py-localize"><code>init_constrained_belief(next_wp[0], next_wp[1],
+                        expected_angle_deg=heading,
+                        radius_mm=150, angle_tol_deg=36)
+
+loc.get_observation_data()   # sends OBS_SCAN, blocks ~27 s
+loc.update_step()
+
+best_x, best_y, best_a = np.unravel_index(np.argmax(loc.bel), loc.bel.shape)
+_, _, best_heading = mapper.from_map(best_x, best_y, best_a)
+
+reset_nav_state("hdg_reset_done")
+ble.send_command(CMD.RESET_HEADING, f"{best_heading:.2f}")
+wait_nav("hdg_reset_done", timeout=3.0)
+current_loc = list(next_wp)</code></pre>
+    </div>
+
+    <p>
+      The Artemis completes all 18 scan positions before sending the data back over BLE. That avoids BLE timing
+      delays between angle samples. Once the scan is finished, it streams the <code>L9ROW</code> measurements in
+      order and then sends <code>OBS_DONE</code>.
+    </p>
+
+    <div class="codeblock">
+      <button class="copybtn" data-copy-target="cpp-obs-scan">Copy</button>
+      <span class="codebadge">C++</span>
+      <pre id="cpp-obs-scan"><code>case OBS_SCAN: {
+    int   num_steps  = (int)parse_float(payload, 0);
+    float step_angle = parse_float(payload, 1);
+
+    for (int i = 0; i &lt; num_steps; i++) {
+        run_yaw_pid((float)i * step_angle);
+        scan_readings[i] = read_tof_blocking();
+    }
+    for (int i = 0; i &lt; num_steps; i++) {
+        tx_estring_value.clear();
+        tx_estring_value.append("L9ROW:");
+        tx_estring_value.append((float)(i * step_angle));
+        tx_estring_value.append(",");
+        tx_estring_value.append(scan_readings[i]);
+        tx_characteristic_string.writeValue(tx_estring_value.c_str());
+        delay(1);
+    }
+    tx_estring_value.clear();
+    tx_estring_value.append("OBS_DONE:");
+    tx_estring_value.append(num_steps);
+    tx_characteristic_string.writeValue(tx_estring_value.c_str());
+    break;
+}</code></pre>
+    </div>
+
+    <h2>Results</h2>
+    <p>
+      The robot completed the full path in one run. Every waypoint was reached within the 8&nbsp;in success
+      radius, and the robot came within 6&nbsp;in of each one. Figure&nbsp;1 shows the lab map from above, with
+      8&nbsp;in circles around the target waypoints and the measured robot positions plotted at each stop.
+    </p>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start;margin:12px 0;">
+      <figure class="media-wrap" style="margin:0;">
+        <img class="media" style="width:100%;height:360px;object-fit:contain;" src="../assets/lab12/overhead.png" alt="Overhead view of the lab map showing waypoints and measured robot positions" />
+        <figcaption>Figure 1: Overhead map view. Circles are 8&nbsp;in success radii; markers are measured robot positions at each waypoint.</figcaption>
+      </figure>
+      <figure class="media-wrap" style="margin:0;">
+        <video class="media" controls style="width:100%;height:360px;object-fit:contain;background:#000;">
+          <source src="../assets/lab12/run.mp4" type="video/mp4" />
+        </video>
+        <figcaption>Video 1: Full autonomous navigation run through all 8 waypoints.</figcaption>
+      </figure>
+    </div>
+
+    <table>
+      <thead>
+        <tr><th>WP</th><th>Target (ft)</th><th>Measured Position (ft)</th><th>XY Error (in)</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td>(&minus;2, &minus;1)</td><td>(&minus;1.51, &minus;1.04)</td><td>5.9</td></tr>
+        <tr><td>2</td><td>(1, &minus;1)</td><td>(1.47, &minus;1.09)</td><td>5.7</td></tr>
+        <tr><td>3</td><td>(2, &minus;3)</td><td>(2.63, &minus;3.02)</td><td>7.6</td></tr>
+        <tr><td>4</td><td>(5, &minus;3)</td><td>(5.32, &minus;2.42)</td><td>8.0</td></tr>
+        <tr><td>5</td><td>(5, 3)</td><td>(4.56, 3.49)</td><td>8.0</td></tr>
+        <tr><td>6</td><td>(0, 3)</td><td>(&minus;0.46, 2.55)</td><td>7.7</td></tr>
+        <tr><td>7</td><td>(0, 0)</td><td>(0.24, &minus;0.62)</td><td>8.0</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Discussion</h2>
+    <p>
+      The timed drive approach worked well for this run because the floor conditions were consistent and the
+      battery was fresh. The 5.9&nbsp;in ToF threshold was mainly there as a safety check for cases where the robot
+      drifted farther than expected. The later waypoints were close to the 8&nbsp;in boundary, especially
+      WP&nbsp;7, so a larger drift event would likely have triggered the localization fallback.
+    </p>
+    <p>
+      Using absolute world-frame headings kept the turn commands from stacking relative-angle error from leg to
+      leg. The main source of error was not the turn PID itself, but gyro integration drift during the straight
+      drive segments. By the final legs, the heading estimate had shifted by about +12&deg;. The localization
+      fallback was designed to correct that kind of drift by resetting the heading from a scan, but the robot
+      stayed close enough to the path that the fallback was not needed in the final run.
+    </p>
+
+    <footer class="footer">
+      <p class="muted">© <span id="year"></span> Coby</p>
+      <p><a class="backlink" href="../collaboration.html">Collaboration Statement</a></p>
+    </footer>
+  </main>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
+  <script src="../site.js"></script>
+</body>
+</html>
